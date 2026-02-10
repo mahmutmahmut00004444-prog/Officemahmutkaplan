@@ -42,12 +42,19 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, errorMessage, isLoad
             <p className="text-sm font-bold text-slate-400 mt-1">نظام إدارة المراجعين المركزي</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
+            {/* خدعة لمنع المتصفح من حفظ المعلومات */}
+            <input type="text" style={{display: 'none'}} />
+            <input type="password" style={{display: 'none'}} />
+
             <div className="space-y-1.5">
               <label className="text-[11px] font-black text-slate-700 mr-2">اسم المستخدم</label>
               <div className="relative">
                 <input 
                   type="text" 
+                  name="username_field_no_save"
+                  id="username_field_no_save"
+                  autoComplete="off"
                   value={username} 
                   onChange={e => setUsername(e.target.value)} 
                   className="w-full h-14 pl-4 pr-12 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-800 outline-none focus:border-blue-600 focus:bg-white transition-all text-right placeholder:text-slate-300"
@@ -65,6 +72,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, errorMessage, isLoad
               <div className="relative">
                 <input 
                   type="password" 
+                  name="password_field_no_save"
+                  id="password_field_no_save"
+                  autoComplete="new-password"
                   value={password} 
                   onChange={e => setPassword(e.target.value)} 
                   className="w-full h-14 pl-4 pr-12 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-800 outline-none focus:border-blue-600 focus:bg-white transition-all text-right placeholder:text-slate-300"

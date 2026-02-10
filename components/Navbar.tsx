@@ -80,16 +80,6 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onRefresh, isSyncing, 
           <svg className={`w-4 h-4 text-blue-600 ${isSyncing ? 'animate-spin' : ''}`} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
           <span className="text-[11px] font-black text-slate-700 hidden md:block">{isSyncing ? 'جاري المزامنة...' : 'تحديث البيانات'}</span>
         </button>
-
-        {loggedInUser && (
-          <button 
-            onClick={onLogout}
-            className="p-3 bg-white text-slate-600 rounded-full shadow-lg border border-slate-100 hover:bg-slate-50 hover:text-slate-800 transition-all active:scale-95 flex items-center justify-center"
-            aria-label="تسجيل الخروج"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
-          </button>
-        )}
       </div>
     </nav>
   );
