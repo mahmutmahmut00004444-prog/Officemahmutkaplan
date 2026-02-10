@@ -30,7 +30,8 @@
       .responsive-table {
         width: 100%;
         border-collapse: collapse;
-        min-width: 900px;
+        /* Reduced min-width to prevent excessive scrolling on small phones while keeping structure */
+        min-width: 600px; 
       }
 
       .responsive-table th, .responsive-table td {
@@ -56,10 +57,16 @@
         border-color: #86efac; /* border-green-300 */
       }
 
+      /* Specific adjustments for Android/Mobile screens */
       @media screen and (max-width: 768px) {
         .responsive-table th, .responsive-table td {
-          padding: 10px 6px;
-          font-size: 11px;
+          padding: 8px 4px; /* Tighter padding */
+          font-size: 10px; /* Smaller font */
+        }
+        
+        .table-container {
+          border-radius: 0.5rem;
+          border-width: 1px;
         }
       }
 
