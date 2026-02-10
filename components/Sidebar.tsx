@@ -69,16 +69,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNavigate, onResetC
       textClass: 'group-hover:text-cyan-700'
     },
     { 
-      id: 'ACCOUNTS_BLOG', 
-      label: 'مدونة الحسابات', 
-      sub: 'ملخص أرصدة المكاتب الشامل', 
-      icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', // Currency/Money
-      colorName: 'emerald',
-      activeClass: 'bg-emerald-600 border-emerald-600 shadow-emerald-200',
-      iconClass: 'text-emerald-600 bg-emerald-50 group-hover:bg-emerald-600 group-hover:text-white',
-      textClass: 'group-hover:text-emerald-700'
-    },
-    { 
       id: 'USER_ACTIVITY', 
       label: 'نشاطات المستخدمين', 
       sub: 'حالة اتصال المكاتب الآن', 
