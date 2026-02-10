@@ -52,6 +52,8 @@ const ManageOffices: React.FC<ManageOfficesProps> = ({ showToast, loggedInUser, 
   const [showNewOfficeForm, setShowNewOfficeForm] = useState(false);
   const newOfficeNameRef = useRef<HTMLInputElement>(null);
 
+  const [now, setNow] = useState(Date.now()); // For activity refresh
+
   const isAdmin = loggedInUser?.role === 'ADMIN';
 
   useEffect(() => {
@@ -61,6 +63,30 @@ const ManageOffices: React.FC<ManageOfficesProps> = ({ showToast, loggedInUser, 
   useEffect(() => {
     if (showNewOfficeForm && newOfficeNameRef.current) newOfficeNameRef.current.focus();
   }, [showNewOfficeForm]);
+
+  // تحديث التوقيت كل 30 ثانية لضمان دقة "متصل منذ..."
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getOnlineStatus = (lastSeen?: string) => {
+    if (!lastSeen) return { text: 'غير معروف', color: 'text-slate-400', isOnline: false };
+    
+    const lastSeenTime = new Date(lastSeen).getTime();
+    if (isNaN(lastSeenTime)) return { text: 'غير معروف', color: 'text-slate-400', isOnline: false };
+
+    const diffMs = now - lastSeenTime;
+    // Threshold set to 90 seconds (1.5 mins) to allow for some network latency
+    // Since heartbeat is 20s, this is plenty buffer.
+    if (diffMs < 90000) {
+        return { text: 'متصل الآن', color: 'text-emerald-600', isOnline: true };
+    } else {
+        const dateStr = new Date(lastSeen).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const timeStr = new Date(lastSeen).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }).replace('am', 'ص').replace('pm', 'م');
+        return { text: `آخر ظهور: ${dateStr} ${timeStr}`, color: 'text-slate-400', isOnline: false };
+    }
+  };
 
   const handleCreateOffice = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -348,16 +374,27 @@ const ManageOffices: React.FC<ManageOfficesProps> = ({ showToast, loggedInUser, 
               </tr>
             </thead>
             <tbody>
-              {offices.map((o, i) => (
-                <tr key={o.id} onClick={() => handleContextMenuClick(o)} className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors group">
-                  <td className="px-6 py-4 text-xs font-black text-slate-400 text-center">{i + 1}</td>
-                  <td className="px-6 py-4 text-sm font-black text-slate-800">{o.office_name}</td>
-                  <td className="px-6 py-4 text-sm font-bold text-blue-600">{o.username || o.office_name}</td>
-                  <td className="px-6 py-4 text-center">
-                    <button className="p-2 bg-slate-100 text-slate-500 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-all"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
-                  </td>
-                </tr>
-              ))}
+              {offices.map((o, i) => {
+                const status = getOnlineStatus(o.last_seen);
+                return (
+                  <tr key={o.id} onClick={() => handleContextMenuClick(o)} className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors group">
+                    <td className="px-6 py-4 text-xs font-black text-slate-400 text-center">{i + 1}</td>
+                    <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-black text-slate-800">{o.office_name}</span>
+                                {status.isOnline && <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-sm"></span>}
+                            </div>
+                            <span className={`text-[10px] font-bold mt-0.5 ${status.color}`}>{status.text}</span>
+                        </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm font-bold text-blue-600">{o.username || o.office_name}</td>
+                    <td className="px-6 py-4 text-center">
+                      <button className="p-2 bg-slate-100 text-slate-500 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-all"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

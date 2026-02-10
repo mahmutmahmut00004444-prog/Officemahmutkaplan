@@ -118,11 +118,11 @@ const App: React.FC = () => {
       // Initial call
       updateHeartbeat();
 
-      // Interval for heartbeat (every 1 minute) and logout check
+      // Interval for heartbeat (every 20 seconds for better accuracy) and logout check
       const interval = setInterval(() => {
         updateHeartbeat();
         checkLogoutStatus();
-      }, 60000); // 60 seconds
+      }, 20000); // 20 seconds
 
       return () => clearInterval(interval);
     }
