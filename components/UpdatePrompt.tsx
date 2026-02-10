@@ -17,7 +17,9 @@ const UpdatePrompt: React.FC = () => {
       setTimeout(() => setShowSuccessMessage(false), 5000);
     }
 
-    if ((import.meta as any).env.DEV) return;
+    // Safely check for DEV environment to prevent "Cannot read properties of undefined (reading 'DEV')"
+    const isDev = (import.meta as any).env && (import.meta as any).env.DEV;
+    if (isDev) return;
 
     const getMainScriptSrc = (html: string) => {
       const match = html.match(/src="(\/assets\/index-[^"]+\.js)"/);

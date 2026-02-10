@@ -4,6 +4,7 @@ import { Reviewer, CIRCLE_NAMES, CircleType, LoggedInUser, FamilyMember, Booking
 import ContextMenuModal, { ContextMenuItem } from './ContextMenuModal';
 import SourceSelectionModal from './SourceSelectionModal';
 import SplitFamilyModal from './SplitFamilyModal';
+import LastUploadsModal from './LastUploadsModal'; // Import new component
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { supabase } from '../lib/supabase';
@@ -81,6 +82,9 @@ export default function ReviewerTable({
   const [recordToSplit, setRecordToSplit] = useState<Reviewer | null>(null);
   const [isSplitting, setIsSplitting] = useState(false);
 
+  // Last Uploads Modal State
+  const [showLastUploadsModal, setShowLastUploadsModal] = useState(false);
+
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkActionType, setBulkActionType] = useState<'UPLOAD' | 'UNUPLOAD' | null>(null);
   
@@ -138,11 +142,8 @@ export default function ReviewerTable({
     return result;
   }, [reviewers, searchQuery, circleFilter, uploadFilter, bookingStatusFilter, bookingDateFilter, familyCountFilter, sourceFilter, showDuplicatesOnly, globalNameFrequency]);
 
-  // حساب عدد المكررين الكلي (بغض النظر عن الفلتر الحالي لتنبيه المستخدم)
-  // أو يمكن حسابه بناءً على الفلتر الحالي ليكون أكثر ديناميكية
+  // حساب عدد المكررين الكلي
   const duplicateCountInCurrentView = useMemo(() => {
-    // If we are already filtering duplicates, this matches the list length. 
-    // If not, it counts how many in the current filtered list are duplicates.
     if (showDuplicatesOnly) return filteredReviewers.length;
     return filteredReviewers.filter(r => globalNameFrequency[r.headFullName.trim()] > 1).length;
   }, [filteredReviewers, globalNameFrequency, showDuplicatesOnly]);
@@ -157,8 +158,6 @@ export default function ReviewerTable({
       [CircleType.OTHERS]: { count: 0, money: 0 }
     };
     filteredReviewers.forEach(record => {
-      // Calculate only for those that count (e.g., booked or generally all? usually stats are for booked/active)
-      // Assuming stats for ALL visible records for general count, and money for booked
       const isBooked = record.isBooked || !!record.bookingImage;
       
       let price = 0;
@@ -370,14 +369,14 @@ export default function ReviewerTable({
 
         const membersToMove = selectedMemberIds.filter(id => id !== newHeadId);
 
-        // 1. Create New Reviewer (from new head data)
+        // 1. Create New Reviewer
         const newReviewerPayload = {
             circle_type: recordToSplit.circleType,
             head_full_name: newHeadMember.fullName,
             head_surname: newHeadMember.surname || recordToSplit.headSurname,
             head_mother_name: newHeadMember.motherName || recordToSplit.headMotherName,
             head_dob: newHeadMember.dob,
-            head_phone: '', // Phone resets
+            head_phone: '', 
             paid_amount: 0,
             remaining_amount: 0,
             created_at: new Date().toISOString()
@@ -391,7 +390,7 @@ export default function ReviewerTable({
 
         if (createError) throw createError;
 
-        // 2. Move Selected Members to New Reviewer
+        // 2. Move Selected Members
         if (membersToMove.length > 0) {
             const { error: moveError } = await supabase
                 .from('family_members')
@@ -401,7 +400,7 @@ export default function ReviewerTable({
             if (moveError) throw moveError;
         }
 
-        // 3. Delete the "New Head" from family_members (since they are now a main Reviewer)
+        // 3. Delete the "New Head" from family_members
         const { error: deleteError } = await supabase
             .from('family_members')
             .delete()
@@ -496,6 +495,23 @@ export default function ReviewerTable({
         />
       )}
 
+      {/* Last Uploads Modal */}
+      {showLastUploadsModal && (
+        <LastUploadsModal
+          isOpen={showLastUploadsModal}
+          onClose={() => setShowLastUploadsModal(false)}
+          reviewers={reviewers}
+          bookingSources={bookingSources}
+          onCancelUpload={async (id, sourceId) => {
+             // Wrapper to call the prop toggle function
+             if (onToggleUploadStatus) {
+                await onToggleUploadStatus(id, true, sourceId); // Toggle from true to false
+             }
+          }}
+          formatCurrency={formatCurrency}
+        />
+      )}
+
       {/* Source Selection Modal */}
       {showSourceSelectionModal && (
         <SourceSelectionModal
@@ -523,7 +539,7 @@ export default function ReviewerTable({
           onSelectSource={async (sourceId) => {
             if (selectedIds.size > 0) {
                 await onBulkToggleUploadStatus(Array.from(selectedIds), true, sourceId);
-                setSelectedIds(new Set()); // Clear selection after successful bulk upload
+                setSelectedIds(new Set()); 
             }
             setShowBulkUploadSelectedModal(false);
           }}
@@ -539,16 +555,9 @@ export default function ReviewerTable({
           title="رفع وتصدير خاص للمحدد"
           onSelectSource={async (sourceId) => {
             if (sourceId && selectedIds.size > 0) {
-               // 1. Capture selected records explicitly from the full list
                const recordsToProcess = reviewers.filter(r => selectedIds.has(r.id));
-               
-               // 2. Generate PDF immediately
                await handleExportPDF(true, recordsToProcess);
-
-               // 3. Update DB
                await onBulkToggleUploadStatus(Array.from(selectedIds), true, sourceId);
-               
-               // 4. Clear selection
                setSelectedIds(new Set());
             }
             setShowSpecialUploadExportModal(false);
@@ -633,7 +642,6 @@ export default function ReviewerTable({
                 سجلات محمود قبلان
              </div>
              
-             {/* Stats Toggle */}
              <label className="flex items-center gap-3 cursor-pointer group">
                 <div className={`w-12 h-6 rounded-full relative transition-colors ${showStats ? 'bg-indigo-600' : 'bg-slate-200'}`}>
                   <input type="checkbox" checked={showStats} onChange={e => setShowStats(e.target.checked)} className="sr-only" />
@@ -642,7 +650,6 @@ export default function ReviewerTable({
                 <span className="font-black text-slate-800 text-xs italic">عرض الاحصائيات</span>
              </label>
 
-             {/* Duplicate Count Indicator - Clickable Filter */}
              {duplicateCountInCurrentView > 0 && (
                 <button 
                   onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
@@ -680,6 +687,11 @@ export default function ReviewerTable({
                 </>
               ) : (
                 <>
+                  <button onClick={() => setShowLastUploadsModal(true)} className="h-9 bg-purple-600 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all shadow-sm flex items-center gap-1 animate-scale-up hover:bg-purple-700">
+                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                     سجل المرفوعات (آخر ما تم رفعه)
+                  </button>
+                  <div className="w-[1px] h-9 bg-slate-200 mx-1"></div>
                   <button onClick={() => handleBulkActionClick('UPLOAD')} className="h-9 bg-fuchsia-600 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all shadow-sm flex items-center gap-1">
                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 13 7 8"/><line x1="12" x2="12" y1="13" y2="1"/></svg>
                      رفع الجميع
@@ -735,7 +747,6 @@ export default function ReviewerTable({
               <p className="text-[10px] font-black text-indigo-700 uppercase mb-1 truncate">{CIRCLE_NAMES[item.circleType]}</p>
               <div className="flex flex-col">
                 <span className="text-xl font-black text-indigo-900 leading-none">{item.count}</span>
-                {/* Money can be displayed if relevant for Reviewers too, assuming logic is same as offices for 'booked' items */}
                 <span className="text-[9px] font-black text-emerald-600 mt-1">{formatCurrency(item.money)}</span>
               </div>
             </div>
