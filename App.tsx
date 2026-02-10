@@ -26,6 +26,7 @@ import SessionsManager from './components/SessionsManager';
 import OfficeSmartListImporter from './components/OfficeSmartListImporter'; 
 import TrashBin from './components/TrashBin'; 
 import UserActivityLog from './components/UserActivityLog'; 
+import UpdatePrompt from './components/UpdatePrompt'; // Import the new component
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { formatCurrency } from './lib/formatCurrency';
 import { GoogleGenAI } from '@google/genai';
@@ -881,6 +882,9 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 font-cairo" dir="rtl">
+      {/* Update Prompt Component added here */}
+      <UpdatePrompt />
+      
       <Navbar 
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} 
         onRefresh={() => fetchAllData(true)} 
