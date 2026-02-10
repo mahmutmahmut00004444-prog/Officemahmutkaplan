@@ -1,13 +1,13 @@
 
 import React, { useState, useMemo } from 'react';
-import { Reviewer, BookingSource, CIRCLE_NAMES } from '../types';
+import { Reviewer, BookingSource, CIRCLE_NAMES, OfficeRecord } from '../types';
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 
 interface LastUploadsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  reviewers: Reviewer[];
+  reviewers: (Reviewer | OfficeRecord)[];
   bookingSources: BookingSource[];
   onCancelUpload: (id: string, sourceId: string | null) => Promise<void>;
   formatCurrency: (amount: number | string | undefined) => string;
@@ -24,8 +24,8 @@ const LastUploadsModal: React.FC<LastUploadsModalProps> = ({
   const [selectedSource, setSelectedSource] = useState<string>('ALL');
   const [isExporting, setIsExporting] = useState(false);
 
-  // Filter only uploaded reviewers
-  const uploadedReviewers = useMemo(() => {
+  // Filter only uploaded reviewers/records
+  const uploadedRecords = useMemo(() => {
     let list = reviewers.filter(r => r.isUploaded);
     
     if (selectedSource !== 'ALL') {
@@ -42,7 +42,7 @@ const LastUploadsModal: React.FC<LastUploadsModalProps> = ({
   const bookingSourcesMap = useMemo(() => new Map(bookingSources.map(s => [s.id, s.sourceName])), [bookingSources]);
 
   const handleExportPDF = async () => {
-    if (uploadedReviewers.length === 0) return;
+    if (uploadedRecords.length === 0) return;
     setIsExporting(true);
     
     try {
@@ -69,10 +69,10 @@ const LastUploadsModal: React.FC<LastUploadsModalProps> = ({
         <th style="${thStyle}; width: 120px;">جهة الرفع</th>
       </tr>`;
 
-      const pages: Reviewer[][] = [[]];
+      const pages: (Reviewer | OfficeRecord)[][] = [[]];
       let currentRowCount = 0;
-      uploadedReviewers.forEach(record => {
-        const familySize = 1; // Simplified for this view, or you can expand family
+      uploadedRecords.forEach(record => {
+        const familySize = 1; 
         if (currentRowCount + familySize > MAX_ROWS_PER_PAGE && currentRowCount > 0) {
           pages.push([record]);
           currentRowCount = familySize;
@@ -90,7 +90,7 @@ const LastUploadsModal: React.FC<LastUploadsModalProps> = ({
         pageDiv.style.position = "absolute";
         pageDiv.style.left = "-10000px";
         pageDiv.style.top = "0";
-        pageDiv.style.width = "800px"; // Portrait width approx
+        pageDiv.style.width = "800px"; 
         pageDiv.style.padding = "30px";
         pageDiv.style.backgroundColor = "#ffffff";
         
@@ -100,11 +100,12 @@ const LastUploadsModal: React.FC<LastUploadsModalProps> = ({
         const bodyHtml = chunk.map((r, idx) => {
           const globalIdx = globalStartIdx + idx;
           const sourceName = r.uploadedSourceId ? bookingSourcesMap.get(r.uploadedSourceId) : 'رفع يدوي (عام)';
-          
+          const officeName = 'affiliation' in r ? ` (${r.affiliation})` : '';
+
           return `<tr>
             <td style="${tdStyle}">${globalIdx}</td>
             <td style="${tdStyle}">${CIRCLE_NAMES[r.circleType]}</td>
-            <td style="${tdRightStyle}">${r.headFullName}</td>
+            <td style="${tdRightStyle}">${r.headFullName}${officeName ? `<br/><span style="color:#666;font-size:8px;">${officeName}</span>` : ''}</td>
             <td style="${tdStyle}">${r.headSurname || '—'}</td>
             <td style="${tdRightStyle}">${r.headMotherName}</td>
             <td style="${tdStyle}">${r.headDob}</td>
@@ -115,7 +116,7 @@ const LastUploadsModal: React.FC<LastUploadsModalProps> = ({
         pageDiv.innerHTML = `
           <div style="text-align: center; margin-bottom: 20px;">
             <h1 style="font-size: 22px; font-weight: 900; margin: 0; border-bottom: 3px solid #000; display: inline-block; padding-bottom: 5px;">كشف الأسماء المرفوعة</h1>
-            <p style="font-size: 12px; font-weight: 700; margin: 10px 0;">التاريخ: ${dateStr} | المصدر: ${selectedSource === 'ALL' ? 'الكل' : (selectedSource === 'MANUAL' ? 'رفع يدوي' : bookingSourcesMap.get(selectedSource))} | العدد: ${uploadedReviewers.length}</p>
+            <p style="font-size: 12px; font-weight: 700; margin: 10px 0;">التاريخ: ${dateStr} | المصدر: ${selectedSource === 'ALL' ? 'الكل' : (selectedSource === 'MANUAL' ? 'رفع يدوي' : bookingSourcesMap.get(selectedSource))} | العدد: ${uploadedRecords.length}</p>
           </div>
           <table style="${tableStyle}">
             <thead>${headerHtmlStr}</thead>
@@ -180,7 +181,7 @@ const LastUploadsModal: React.FC<LastUploadsModalProps> = ({
            <div className="flex items-end gap-2">
               <button 
                 onClick={handleExportPDF} 
-                disabled={isExporting || uploadedReviewers.length === 0}
+                disabled={isExporting || uploadedRecords.length === 0}
                 className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-xs shadow-lg active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50"
               >
                 {isExporting ? 'جاري التصدير...' : 'تصدير الكشف (PDF)'}
@@ -205,18 +206,22 @@ const LastUploadsModal: React.FC<LastUploadsModalProps> = ({
                     </tr>
                  </thead>
                  <tbody className="text-xs font-bold text-slate-800">
-                    {uploadedReviewers.length === 0 ? (
+                    {uploadedRecords.length === 0 ? (
                        <tr><td colSpan={7} className="p-10 text-center text-slate-400 font-bold italic">لا توجد أسماء مرفوعة مطابقة للفلتر.</td></tr>
                     ) : (
-                       uploadedReviewers.map((r, idx) => {
+                       uploadedRecords.map((r, idx) => {
                          const sourceName = r.uploadedSourceId ? bookingSourcesMap.get(r.uploadedSourceId) : 'رفع يدوي (عام)';
                          // Use createdAt as proxy for display since we don't track exact upload timestamp in this version
                          const dateDisplay = r.bookingCreatedAt ? new Date(r.bookingCreatedAt).toLocaleDateString('en-GB') : new Date(r.createdAt).toLocaleDateString('en-GB');
+                         const isOffice = 'affiliation' in r;
 
                          return (
                            <tr key={r.id} className="border-b border-slate-100 hover:bg-fuchsia-50 transition-colors">
                               <td className="p-4 text-center text-slate-400">{idx + 1}</td>
-                              <td className="p-4 font-black">{r.headFullName}</td>
+                              <td className="p-4 font-black">
+                                {r.headFullName}
+                                {isOffice && <span className="block text-[9px] text-indigo-600 mt-1">مكتب: {(r as OfficeRecord).affiliation}</span>}
+                              </td>
                               <td className="p-4 text-fuchsia-700">{CIRCLE_NAMES[r.circleType]}</td>
                               <td className="p-4 text-center text-slate-500" dir="ltr">{r.headPhone || '-'}</td>
                               <td className="p-4 text-center">
@@ -243,7 +248,7 @@ const LastUploadsModal: React.FC<LastUploadsModalProps> = ({
         </div>
         
         <div className="mt-4 flex justify-between items-center text-[10px] font-bold text-slate-400 px-2">
-           <span>العدد الكلي: {uploadedReviewers.length}</span>
+           <span>العدد الكلي: {uploadedRecords.length}</span>
            <span>* تاريخ الإجراء المعروض هو تاريخ إنشاء السجل أو آخر تعديل للحجز</span>
         </div>
 

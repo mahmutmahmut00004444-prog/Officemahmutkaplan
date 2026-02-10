@@ -4,6 +4,7 @@ import { OfficeRecord, CIRCLE_NAMES, CircleType, LoggedInUser, FamilyMember, Boo
 import ContextMenuModal, { ContextMenuItem } from './ContextMenuModal';
 import SourceSelectionModal from './SourceSelectionModal';
 import SplitFamilyModal from './SplitFamilyModal';
+import LastUploadsModal from './LastUploadsModal'; // Import
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { supabase } from '../lib/supabase';
@@ -84,6 +85,9 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [recordToSplit, setRecordToSplit] = useState<OfficeRecord | null>(null);
   const [isSplitting, setIsSplitting] = useState(false);
+
+  // Last Uploads Modal State
+  const [showLastUploadsModal, setShowLastUploadsModal] = useState(false);
 
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkActionType, setBulkActionType] = useState<'UPLOAD' | 'UNUPLOAD' | null>(null);
@@ -547,6 +551,22 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
         />
       )}
 
+      {/* Last Uploads Modal */}
+      {showLastUploadsModal && (
+        <LastUploadsModal
+          isOpen={showLastUploadsModal}
+          onClose={() => setShowLastUploadsModal(false)}
+          reviewers={records}
+          bookingSources={bookingSources}
+          onCancelUpload={async (id, sourceId) => {
+             if (onToggleUploadStatus) {
+                await onToggleUploadStatus(id, true, sourceId); // Toggle from true to false
+             }
+          }}
+          formatCurrency={formatCurrency}
+        />
+      )}
+
       {showSourceSelectionModal && (
         <SourceSelectionModal
           isOpen={showSourceSelectionModal}
@@ -691,7 +711,7 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
              )}
            </div>
 
-           <div className="flex gap-2">
+           <div className="flex flex-wrap items-center gap-2 justify-start md:justify-end w-full md:w-auto">
               {isSelectionMode ? (
                 <>
                   {isAdmin && (
@@ -711,6 +731,11 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
                 <>
                   {isAdmin && (
                     <>
+                        <button onClick={() => setShowLastUploadsModal(true)} className="h-9 bg-purple-600 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all shadow-sm flex items-center gap-1 animate-scale-up hover:bg-purple-700">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                            سجل المرفوعات (آخر ما تم رفعه)
+                        </button>
+                        <div className="hidden md:block w-[1px] h-9 bg-slate-200 mx-1"></div>
                         <button onClick={() => handleBulkActionClick('UPLOAD')} className="h-9 bg-fuchsia-600 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all shadow-sm flex items-center gap-1">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 13 7 8"/><line x1="12" x2="12" y1="13" y2="1"/></svg>
                             رفع الجميع
@@ -719,7 +744,7 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                             إلغاء رفع الجميع
                         </button>
-                        <div className="w-[1px] h-9 bg-slate-200 mx-1"></div>
+                        <div className="hidden md:block w-[1px] h-9 bg-slate-200 mx-1"></div>
                     </>
                   )}
                   

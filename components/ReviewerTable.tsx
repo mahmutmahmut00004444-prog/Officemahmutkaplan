@@ -663,7 +663,7 @@ export default function ReviewerTable({
              )}
            </div>
 
-           <div className="flex gap-2">
+           <div className="flex flex-wrap items-center gap-2 justify-start md:justify-end w-full md:w-auto">
               {isSelectionMode ? (
                 <>
                   {isAdmin && (
@@ -691,7 +691,7 @@ export default function ReviewerTable({
                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
                      سجل المرفوعات (آخر ما تم رفعه)
                   </button>
-                  <div className="w-[1px] h-9 bg-slate-200 mx-1"></div>
+                  <div className="hidden md:block w-[1px] h-9 bg-slate-200 mx-1"></div>
                   <button onClick={() => handleBulkActionClick('UPLOAD')} className="h-9 bg-fuchsia-600 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all shadow-sm flex items-center gap-1">
                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 13 7 8"/><line x1="12" x2="12" y1="13" y2="1"/></svg>
                      رفع الجميع
@@ -700,7 +700,7 @@ export default function ReviewerTable({
                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                      إلغاء رفع الجميع
                   </button>
-                  <div className="w-[1px] h-9 bg-slate-200 mx-1"></div>
+                  <div className="hidden md:block w-[1px] h-9 bg-slate-200 mx-1"></div>
                   <button onClick={() => handleExportPDF(false)} disabled={exportingType !== null} className="h-9 bg-slate-900 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all disabled:opacity-50">تصدير PDF (عام)</button>
                   <button onClick={() => handleExportPDF(true)} disabled={exportingType !== null} className="h-9 bg-indigo-700 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all disabled:opacity-50">تصدير PDF (خاص)</button>
                 </>
