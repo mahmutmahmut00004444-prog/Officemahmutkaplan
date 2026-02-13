@@ -1,15 +1,18 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { OfficeUser } from '../types';
+import { supabase } from '../lib/supabase';
 
 interface UserActivityLogProps {
   allOfficeUsers: OfficeUser[];
   onGoBack: () => void;
+  showToast?: (message: string, type: 'success' | 'error') => void; // Made optional for backward compatibility if not passed everywhere
 }
 
-export default function UserActivityLog({ allOfficeUsers, onGoBack }: UserActivityLogProps) {
+export default function UserActivityLog({ allOfficeUsers, onGoBack, showToast }: UserActivityLogProps) {
   const [now, setNow] = useState(Date.now());
   const [searchQuery, setSearchQuery] = useState('');
+  const [processingLogout, setProcessingLogout] = useState<string | null>(null);
 
   // Update "now" every minute to refresh relative times
   useEffect(() => {
@@ -60,6 +63,21 @@ export default function UserActivityLog({ allOfficeUsers, onGoBack }: UserActivi
     }).replace('am', 'ص').replace('pm', 'م');
   };
 
+  const handleForceLogout = async (userId: string, officeName: string) => {
+    if (!confirm(`هل أنت متأكد من إنهاء جلسة "${officeName}"؟ سيتم تسجيل خروجه فوراً.`)) return;
+    
+    setProcessingLogout(userId);
+    try {
+      const { error } = await supabase.from('office_users').update({ force_logout: true }).eq('id', userId);
+      if (error) throw error;
+      if (showToast) showToast(`تم إرسال أمر إنهاء الجلسة لـ ${officeName}`, 'success');
+    } catch (err: any) {
+      if (showToast) showToast(`فشل إنهاء الجلسة: ${err.message}`, 'error');
+    } finally {
+      setProcessingLogout(null);
+    }
+  };
+
   const stats = useMemo(() => {
     let online = 0;
     let offline = 0;
@@ -70,8 +88,27 @@ export default function UserActivityLog({ allOfficeUsers, onGoBack }: UserActivi
     return { total: allOfficeUsers.length, online, offline };
   }, [allOfficeUsers, now]);
 
+  // Helper to get admin device info client-side for display
+  const getAdminDeviceInfo = () => {
+    const ua = navigator.userAgent;
+    let device = "Unknown";
+    if (/android/i.test(ua)) device = "Android Mobile";
+    else if (/iPad|iPhone|iPod/.test(ua)) device = "iOS Mobile";
+    else if (/windows/i.test(ua)) device = "Windows PC";
+    else if (/macintosh/i.test(ua)) device = "Mac OS";
+    else if (/linux/i.test(ua)) device = "Linux PC";
+    
+    let browser = "Browser";
+    if (ua.indexOf("Chrome") > -1) browser = "Chrome";
+    else if (ua.indexOf("Safari") > -1) browser = "Safari";
+    else if (ua.indexOf("Firefox") > -1) browser = "Firefox";
+    else if (ua.indexOf("Edge") > -1) browser = "Edge";
+
+    return `${device} - ${browser}`;
+  };
+
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-40 animate-scale-up">
+    <div className="max-w-6xl mx-auto space-y-6 pb-40 animate-scale-up">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
          <div className="bg-white p-5 rounded-[2rem] border-2 border-slate-100 shadow-sm flex items-center justify-between">
@@ -112,7 +149,7 @@ export default function UserActivityLog({ allOfficeUsers, onGoBack }: UserActivi
 
         <div className="pt-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-            <h2 className="text-2xl font-black text-slate-900">سجل النشاطات</h2>
+            <h2 className="text-2xl font-black text-slate-900">سجل النشاطات والأجهزة</h2>
             <input 
               type="text" 
               placeholder="بحث عن مكتب..." 
@@ -124,15 +161,17 @@ export default function UserActivityLog({ allOfficeUsers, onGoBack }: UserActivi
 
           <div className="table-container rounded-3xl border border-slate-200 overflow-hidden shadow-sm bg-white">
             <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-right border-collapse min-w-[700px]">
+              <table className="w-full text-right border-collapse min-w-[900px]">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
                     <th className="p-4 text-[10px] font-black text-center w-16">ت</th>
                     <th className="p-4 text-[10px] font-black w-16">الحالة</th>
                     <th className="p-4 text-[10px] font-black">اسم المكتب</th>
                     <th className="p-4 text-[10px] font-black">اسم المستخدم</th>
+                    <th className="p-4 text-[10px] font-black">الجهاز المستخدم</th>
                     <th className="p-4 text-[10px] font-black text-center">آخر ظهور</th>
                     <th className="p-4 text-[10px] font-black text-center">المدة</th>
+                    <th className="p-4 text-[10px] font-black text-center">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody className="text-sm font-bold text-slate-700">
@@ -150,25 +189,44 @@ export default function UserActivityLog({ allOfficeUsers, onGoBack }: UserActivi
                         <td className="p-4">
                            <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">{user.username}</span>
                         </td>
+                        {/* Device Info Column */}
+                        <td className="p-4">
+                           <span className={`text-xs font-black ${status.isOnline ? 'text-blue-600' : 'text-slate-400'}`}>
+                             {user.device_name || 'غير معروف'}
+                           </span>
+                        </td>
                         <td className="p-4 text-center">
-                           <span className="text-xs font-bold text-blue-600" dir="ltr">{formatLastActiveTime(user.last_seen)}</span>
+                           <span className="text-xs font-bold text-slate-500" dir="ltr">{formatLastActiveTime(user.last_seen)}</span>
                         </td>
                         <td className="p-4 text-center">
                            <span className={`text-[10px] font-black px-3 py-1 rounded-full ${status.bg} ${status.color}`}>
                               {status.label}
                            </span>
                         </td>
+                        <td className="p-4 text-center">
+                           <button 
+                             onClick={() => handleForceLogout(user.id, user.office_name)}
+                             disabled={processingLogout === user.id}
+                             className="text-[9px] bg-red-50 text-red-600 px-3 py-1.5 rounded-lg border border-red-100 hover:bg-red-600 hover:text-white transition-all font-black"
+                           >
+                             {processingLogout === user.id ? 'جاري...' : 'إنهاء الجلسة'}
+                           </button>
+                        </td>
                       </tr>
                     );
                   })}
                   {sortedUsers.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="p-10 text-center text-slate-400 font-bold italic">لا توجد نتائج مطابقة</td>
+                      <td colSpan={8} className="p-10 text-center text-slate-400 font-bold italic">لا توجد نتائج مطابقة</td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
+          </div>
+          
+          <div className="text-center mt-4 pt-4 border-t border-slate-100">
+             <p className="text-[10px] font-bold text-slate-400">جهازك الحالي (الأدمن): <span className="text-blue-600 font-black">{getAdminDeviceInfo()}</span></p>
           </div>
         </div>
       </div>

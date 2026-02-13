@@ -86,6 +86,26 @@ const App: React.FC = () => {
     setTimeout(() => setToast(null), 5000); 
   };
 
+  // Helper to get simple device name
+  const getDeviceInfo = () => {
+    const ua = navigator.userAgent;
+    let device = "Unknown";
+    if (/android/i.test(ua)) device = "Android Mobile";
+    else if (/iPad|iPhone|iPod/.test(ua)) device = "iOS Mobile";
+    else if (/windows/i.test(ua)) device = "Windows PC";
+    else if (/macintosh/i.test(ua)) device = "Mac OS";
+    else if (/linux/i.test(ua)) device = "Linux PC";
+    
+    // Add Browser
+    let browser = "Browser";
+    if (ua.indexOf("Chrome") > -1) browser = "Chrome";
+    else if (ua.indexOf("Safari") > -1) browser = "Safari";
+    else if (ua.indexOf("Firefox") > -1) browser = "Firefox";
+    else if (ua.indexOf("Edge") > -1) browser = "Edge";
+
+    return `${device} - ${browser}`;
+  };
+
   // Fetch Admin Password on Load
   useEffect(() => {
     const fetchAdminPassword = async () => {
@@ -153,11 +173,14 @@ const App: React.FC = () => {
   // Check logout and update heartbeat for Office users
   useEffect(() => {
     if (loggedInUser && loggedInUser.role === 'OFFICE' && isSupabaseConfigured) {
-      // 1. Heartbeat function to update last_seen
+      // 1. Heartbeat function to update last_seen AND device info
       const updateHeartbeat = async () => {
         if (!loggedInUser.officeId) return;
         try {
-          await supabase.from('office_users').update({ last_seen: new Date().toISOString() }).eq('id', loggedInUser.officeId);
+          await supabase.from('office_users').update({ 
+            last_seen: new Date().toISOString(),
+            device_name: getDeviceInfo() // Update device name on heartbeat
+          }).eq('id', loggedInUser.officeId);
         } catch (e) { console.error("Heartbeat error", e); }
       };
 
@@ -271,8 +294,11 @@ const App: React.FC = () => {
           const user: LoggedInUser = { username: data.office_name, role: 'OFFICE', officeId: data.id };
           setLoggedInUser(user); localStorage.setItem('loggedInUser', JSON.stringify(user));
           
-          // Update last seen on login
-          await supabase.from('office_users').update({ last_seen: new Date().toISOString() }).eq('id', data.id);
+          // Update last seen AND DEVICE INFO on login
+          await supabase.from('office_users').update({ 
+            last_seen: new Date().toISOString(),
+            device_name: getDeviceInfo()
+          }).eq('id', data.id);
 
           showToast(`مرحباً بك: ${data.office_name}`); setIsLoading(false); setCurrentView('OFFICE_ALL'); return;
         } else {
@@ -336,7 +362,8 @@ const App: React.FC = () => {
         ...u, 
         phone_number: u.phone_number, 
         username: u.username || u.office_name,
-        last_seen: u.last_seen, // Added last_seen
+        last_seen: u.last_seen, 
+        device_name: u.device_name, // Added device_name
         priceRightMosul: u.price_right_mosul, 
         priceLeftMosul: u.price_left_mosul,
         priceHammamAlAlil: u.price_hammam_alalil, 
@@ -1231,7 +1258,7 @@ const App: React.FC = () => {
                 ) : currentView === 'TRASH' ? (
                   <TrashBin onGoBack={onGoBack} showToast={showToast} onRestore={handleRestoreFromTrash} />
                 ) : currentView === 'USER_ACTIVITY' ? (
-                  <UserActivityLog allOfficeUsers={allOfficeUsers} onGoBack={onGoBack} />
+                  <UserActivityLog allOfficeUsers={allOfficeUsers} onGoBack={onGoBack} showToast={showToast} />
                 ) : null}
               </>
             )}

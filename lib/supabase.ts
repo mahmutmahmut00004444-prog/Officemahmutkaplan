@@ -65,7 +65,8 @@ import { createClient } from '@supabase/supabase-js';
  * );
  * -- إضافة الأعمدة الناقصة
  * ALTER TABLE public.office_users ADD COLUMN IF NOT EXISTS username TEXT;
- * ALTER TABLE public.office_users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ; -- حقل جديد لنشاط المستخدمين
+ * ALTER TABLE public.office_users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ; 
+ * ALTER TABLE public.office_users ADD COLUMN IF NOT EXISTS device_name TEXT; -- حقل جديد لاسم الجهاز
  * ALTER TABLE public.office_users ADD COLUMN IF NOT EXISTS price_right_mosul NUMERIC DEFAULT 0;
  * ALTER TABLE public.office_users ADD COLUMN IF NOT EXISTS price_left_mosul NUMERIC DEFAULT 0;
  * ALTER TABLE public.office_users ADD COLUMN IF NOT EXISTS price_others NUMERIC DEFAULT 0;

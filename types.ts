@@ -180,6 +180,7 @@ export interface OfficeUser {
   created_at: string;
   created_by: string;
   last_seen?: string; // New field for user activity
+  device_name?: string; // New field for device name
   priceRightMosul?: number;
   priceLeftMosul?: number;
   priceHammamAlAlil?: number;
