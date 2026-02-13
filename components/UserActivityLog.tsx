@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 interface UserActivityLogProps {
   allOfficeUsers: OfficeUser[];
   onGoBack: () => void;
-  showToast?: (message: string, type: 'success' | 'error') => void; // Made optional for backward compatibility if not passed everywhere
+  showToast?: (message: string, type: 'success' | 'error') => void;
 }
 
 export default function UserActivityLog({ allOfficeUsers, onGoBack, showToast }: UserActivityLogProps) {
@@ -31,7 +31,7 @@ export default function UserActivityLog({ allOfficeUsers, onGoBack, showToast }:
         const timeB = b.last_seen ? new Date(b.last_seen).getTime() : 0;
         return timeB - timeA; // Most recently active first
       });
-  }, [allOfficeUsers, searchQuery]);
+  }, [allOfficeUsers, searchQuery, now]); // Added 'now' to dependency to force re-sort if needed (though visually re-render is enough)
 
   const getStatus = (lastSeen?: string) => {
     if (!lastSeen) return { label: 'غير معروف', color: 'text-slate-400', bg: 'bg-slate-100', isOnline: false };
@@ -64,18 +64,40 @@ export default function UserActivityLog({ allOfficeUsers, onGoBack, showToast }:
   };
 
   const handleForceLogout = async (userId: string, officeName: string) => {
-    if (!confirm(`هل أنت متأكد من إنهاء جلسة "${officeName}"؟ سيتم تسجيل خروجه فوراً.`)) return;
+    if (!confirm(`تحذير: سيتم طرد "${officeName}" من النظام فوراً.\n\nهل أنت متأكد من إنهاء الجلسة؟`)) return;
     
     setProcessingLogout(userId);
     try {
       const { error } = await supabase.from('office_users').update({ force_logout: true }).eq('id', userId);
       if (error) throw error;
-      if (showToast) showToast(`تم إرسال أمر إنهاء الجلسة لـ ${officeName}`, 'success');
+      if (showToast) showToast(`تم إرسال أمر إنهاء الجلسة لـ ${officeName} بنجاح`, 'success');
     } catch (err: any) {
       if (showToast) showToast(`فشل إنهاء الجلسة: ${err.message}`, 'error');
     } finally {
       setProcessingLogout(null);
     }
+  };
+
+  const getDeviceIcon = (deviceName?: string) => {
+    if (!deviceName) return <span className="text-xl">❓</span>;
+    const lower = deviceName.toLowerCase();
+    if (lower.includes('mobile') || lower.includes('iphone') || lower.includes('android')) {
+      return (
+        <div className="flex items-center gap-1 text-slate-600 bg-slate-100 px-2 py-1 rounded-lg">
+           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>
+           <span className="text-[10px] font-black">موبايل</span>
+        </div>
+      );
+    }
+    if (lower.includes('windows') || lower.includes('mac') || lower.includes('linux')) {
+        return (
+            <div className="flex items-center gap-1 text-slate-600 bg-slate-100 px-2 py-1 rounded-lg">
+               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+               <span className="text-[10px] font-black">كمبيوتر</span>
+            </div>
+          );
+    }
+    return <span className="text-sm">💻</span>;
   };
 
   const stats = useMemo(() => {
@@ -191,9 +213,14 @@ export default function UserActivityLog({ allOfficeUsers, onGoBack, showToast }:
                         </td>
                         {/* Device Info Column */}
                         <td className="p-4">
-                           <span className={`text-xs font-black ${status.isOnline ? 'text-blue-600' : 'text-slate-400'}`}>
-                             {user.device_name || 'غير معروف'}
-                           </span>
+                           <div className="flex flex-col gap-1">
+                             <div className="flex items-center gap-2">
+                                {getDeviceIcon(user.device_name)}
+                                <span className={`text-[11px] font-black ${status.isOnline ? 'text-blue-700' : 'text-slate-400'} truncate max-w-[200px]`}>
+                                    {user.device_name || 'غير معروف'}
+                                </span>
+                             </div>
+                           </div>
                         </td>
                         <td className="p-4 text-center">
                            <span className="text-xs font-bold text-slate-500" dir="ltr">{formatLastActiveTime(user.last_seen)}</span>
@@ -207,9 +234,20 @@ export default function UserActivityLog({ allOfficeUsers, onGoBack, showToast }:
                            <button 
                              onClick={() => handleForceLogout(user.id, user.office_name)}
                              disabled={processingLogout === user.id}
-                             className="text-[9px] bg-red-50 text-red-600 px-3 py-1.5 rounded-lg border border-red-100 hover:bg-red-600 hover:text-white transition-all font-black"
+                             className={`text-[9px] px-3 py-2 rounded-lg border transition-all font-black flex items-center justify-center gap-1 w-full ${
+                                processingLogout === user.id 
+                                ? 'bg-slate-100 text-slate-400 border-slate-200' 
+                                : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white'
+                             }`}
                            >
-                             {processingLogout === user.id ? 'جاري...' : 'إنهاء الجلسة'}
+                             {processingLogout === user.id ? (
+                                'جاري...'
+                             ) : (
+                                <>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                                    إنهاء الجلسة
+                                </>
+                             )}
                            </button>
                         </td>
                       </tr>
