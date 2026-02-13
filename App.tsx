@@ -32,7 +32,7 @@ import { formatCurrency } from './lib/formatCurrency';
 import { GoogleGenAI } from '@google/genai';
 
 const ADMIN_USERNAME = "محمود قبلان";
-const DEFAULT_ADMIN_PASSWORD = "2004010422M"; // Fallback only (تم تغييره حسب الطلب)
+const DEFAULT_ADMIN_PASSWORD = "20040104222026"; // Fallback only (تم التحديث)
 
 const App: React.FC = () => {
   const [loggedInUser, setLoggedInUser] = useState<LoggedInUser | null>(() => {
