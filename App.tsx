@@ -32,7 +32,7 @@ import { formatCurrency } from './lib/formatCurrency';
 import { GoogleGenAI } from '@google/genai';
 
 const ADMIN_USERNAME = "محمود قبلان";
-const ADMIN_PASSWORD = "2004010422Mk";
+const DEFAULT_ADMIN_PASSWORD = "2004010422M"; // Fallback only (تم تغييره حسب الطلب)
 
 const App: React.FC = () => {
   const [loggedInUser, setLoggedInUser] = useState<LoggedInUser | null>(() => {
@@ -45,6 +45,7 @@ const App: React.FC = () => {
   const isAdmin = loggedInUser?.role === 'ADMIN';
   
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [adminDynamicPassword, setAdminDynamicPassword] = useState<string>(DEFAULT_ADMIN_PASSWORD);
   
   // تعيين الصفحة الافتراضية بناءً على نوع المستخدم عند التحميل
   const [currentView, setCurrentView] = useState<ViewType>(() => {
@@ -83,6 +84,60 @@ const App: React.FC = () => {
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 5000); 
+  };
+
+  // Fetch Admin Password on Load
+  useEffect(() => {
+    const fetchAdminPassword = async () => {
+      if (!isSupabaseConfigured) return;
+      try {
+        const { data, error } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'admin_password')
+          .single();
+        
+        if (data && data.value) {
+          setAdminDynamicPassword(data.value);
+        } else {
+          // Initialize if not exists
+          await supabase.from('app_settings').upsert({
+             key: 'admin_password',
+             value: DEFAULT_ADMIN_PASSWORD,
+             updated_at: new Date().toISOString()
+          });
+        }
+      } catch (e) {
+        console.error("Failed to fetch admin password", e);
+      }
+    };
+    fetchAdminPassword();
+  }, []);
+
+  // Handle Admin Password Change
+  const handleChangeAdminPassword = async (oldPass: string, newPass: string) => {
+    if (oldPass !== adminDynamicPassword) {
+      throw new Error("كلمة المرور الحالية غير صحيحة");
+    }
+    if (newPass.length < 6) {
+      throw new Error("كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل");
+    }
+
+    try {
+      const { error } = await supabase.from('app_settings').upsert({
+        key: 'admin_password',
+        value: newPass,
+        updated_at: new Date().toISOString(),
+        updated_by: ADMIN_USERNAME
+      });
+
+      if (error) throw error;
+      
+      setAdminDynamicPassword(newPass);
+      showToast("تم تغيير كلمة مرور المدير بنجاح", "success");
+    } catch (err: any) {
+      throw new Error(err.message || "فشل التحديث في قاعدة البيانات");
+    }
   };
 
   // فرض التوجيه الصحيح بناءً على الدور
@@ -196,7 +251,8 @@ const App: React.FC = () => {
 
   const handleLogin = async (usernameInput: string, passwordInput: string) => {
     setLoginError(null); setIsLoading(true);
-    if (usernameInput === ADMIN_USERNAME && passwordInput === ADMIN_PASSWORD) {
+    // Modified to use dynamic password
+    if (usernameInput === ADMIN_USERNAME && passwordInput === adminDynamicPassword) {
       const user: LoggedInUser = { username: ADMIN_USERNAME, role: 'ADMIN' };
       setLoggedInUser(user); localStorage.setItem('loggedInUser', JSON.stringify(user));
       showToast('تم تسجيل الدخول كمدير'); setIsLoading(false); setCurrentView('FORM'); return;
@@ -1158,7 +1214,13 @@ const App: React.FC = () => {
                     onStatsUpdate={setSessionStats}
                   />
                 ) : currentView === 'SETTINGS' ? (
-                  <SettingsPage onNavigate={handleNavigate} onResetClick={() => setShowResetModal(true)} onGoBack={onGoBack} loggedInUser={loggedInUser} />
+                  <SettingsPage 
+                    onNavigate={handleNavigate} 
+                    onResetClick={() => setShowResetModal(true)} 
+                    onGoBack={onGoBack} 
+                    loggedInUser={loggedInUser}
+                    onChangeAdminPassword={handleChangeAdminPassword} // Pass handler
+                  />
                 ) : currentView === 'BACKUP' ? (
                   <BackupManager 
                     reviewers={reviewers} 

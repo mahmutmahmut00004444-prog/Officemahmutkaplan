@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 const UpdatePrompt: React.FC = () => {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [lastChecked, setLastChecked] = useState(Date.now());
-  const [countdown, setCountdown] = useState(60); // 60 seconds countdown
+  const [countdown, setCountdown] = useState(30); // 30 seconds countdown
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   useEffect(() => {
@@ -22,15 +22,19 @@ const UpdatePrompt: React.FC = () => {
     if (isDev) return;
 
     const getMainScriptSrc = (html: string) => {
+      // Regex to find the main vite bundle (usually assets/index-HASH.js)
       const match = html.match(/src="(\/assets\/index-[^"]+\.js)"/);
       return match ? match[1] : null;
     };
 
     const checkVersion = async () => {
       try {
+        // Fetch index.html with cache busting
         const response = await fetch(`/?t=${Date.now()}`, { cache: 'no-store' });
         const newHtml = await response.text();
         const newScript = getMainScriptSrc(newHtml);
+        
+        // Get current script from DOM
         const currentScriptTag = document.querySelector('script[src*="/assets/index-"]');
         const currentScript = currentScriptTag ? currentScriptTag.getAttribute('src') : null;
 
@@ -43,9 +47,13 @@ const UpdatePrompt: React.FC = () => {
       }
     };
 
+    // Check immediately on load/mount
     checkVersion();
+
+    // Check every 60 seconds
     const interval = setInterval(checkVersion, 60 * 1000);
 
+    // Also check when window regains focus
     const handleFocus = () => {
         if (Date.now() - lastChecked > 60000) { 
             checkVersion();
@@ -75,6 +83,7 @@ const UpdatePrompt: React.FC = () => {
   }, [updateAvailable, countdown]);
 
   const handleUpdate = () => {
+    // Clear caches if possible
     if ('caches' in window) {
       caches.keys().then((names) => {
         names.forEach((name) => {
@@ -82,6 +91,7 @@ const UpdatePrompt: React.FC = () => {
         });
       });
     }
+    // Set flag to show success message after reload
     sessionStorage.setItem('app_updated_flag', 'true');
     window.location.reload();
   };
@@ -103,7 +113,7 @@ const UpdatePrompt: React.FC = () => {
                 <h2 className="text-2xl font-black text-slate-900 mb-2">تحديث إجباري</h2>
                 <div className="bg-red-50 p-4 rounded-2xl border border-red-100 mb-6">
                   <p className="text-red-700 font-bold text-sm leading-relaxed">
-                  تم اكتشاف تحديثات هامة في النظام.
+                  تم اكتشاف تغييرات جديدة في كود التطبيق.
                   <br />
                   <span className="font-black text-red-800">سيتم تحديث التطبيق تلقائياً خلال:</span>
                   </p>
