@@ -186,9 +186,11 @@ const App: React.FC = () => {
 
       // 2. Check logout status function
       const checkLogoutStatus = async () => {
-        const { data } = await supabase.from('office_users').select('force_logout').eq('office_name', loggedInUser.username).single();
+        if (!loggedInUser.officeId) return;
+        const { data } = await supabase.from('office_users').select('force_logout').eq('id', loggedInUser.officeId).single();
         if (data?.force_logout) {
-          await supabase.from('office_users').update({ force_logout: false }).eq('office_name', loggedInUser.username);
+          // Reset the flag so they can login again later if permitted
+          await supabase.from('office_users').update({ force_logout: false }).eq('id', loggedInUser.officeId);
           handleLogout();
           alert('انتهت جلستك. تم تسجيل خروجك من قبل المسؤول.');
         }
@@ -294,10 +296,11 @@ const App: React.FC = () => {
           const user: LoggedInUser = { username: data.office_name, role: 'OFFICE', officeId: data.id };
           setLoggedInUser(user); localStorage.setItem('loggedInUser', JSON.stringify(user));
           
-          // Update last seen AND DEVICE INFO on login
+          // Update last seen AND DEVICE INFO on login AND Reset force_logout
           await supabase.from('office_users').update({ 
             last_seen: new Date().toISOString(),
-            device_name: getDeviceInfo()
+            device_name: getDeviceInfo(),
+            force_logout: false // Ensure they are not kicked out immediately
           }).eq('id', data.id);
 
           showToast(`مرحباً بك: ${data.office_name}`); setIsLoading(false); setCurrentView('OFFICE_ALL'); return;

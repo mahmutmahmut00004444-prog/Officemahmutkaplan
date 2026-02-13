@@ -181,6 +181,7 @@ export interface OfficeUser {
   created_by: string;
   last_seen?: string; // New field for user activity
   device_name?: string; // New field for device name
+  force_logout?: boolean; // New field for forced logout
   priceRightMosul?: number;
   priceLeftMosul?: number;
   priceHammamAlAlil?: number;
