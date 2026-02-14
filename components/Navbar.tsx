@@ -76,10 +76,22 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onRefresh, isSyncing, 
           onClick={onRefresh}
           disabled={isSyncing}
           className={`flex items-center justify-center gap-2 w-9 h-9 md:w-auto md:h-auto md:px-3 md:py-2 rounded-xl border-2 border-slate-100 transition-all active:scale-95 ${isSyncing ? 'bg-slate-50 opacity-50' : 'bg-white hover:border-blue-200 hover:bg-blue-50'}`}
+          title="تحديث البيانات"
         >
           <svg className={`w-4 h-4 text-blue-600 ${isSyncing ? 'animate-spin' : ''}`} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
           <span className="text-[11px] font-black text-slate-700 hidden md:block">{isSyncing ? 'مزامنة...' : 'تحديث'}</span>
         </button>
+
+        {loggedInUser && (
+          <button 
+            onClick={onLogout}
+            className="flex items-center justify-center gap-2 w-9 h-9 md:w-auto md:h-auto md:px-3 md:py-2 rounded-xl border-2 border-red-50 hover:bg-red-50 hover:border-red-100 text-red-600 transition-all active:scale-95 bg-white"
+            title="تسجيل الخروج"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+            <span className="text-[11px] font-black hidden md:block">خروج</span>
+          </button>
+        )}
       </div>
     </nav>
   );
