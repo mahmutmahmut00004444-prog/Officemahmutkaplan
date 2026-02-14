@@ -461,6 +461,15 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
     }
   };
 
+  const downloadImage = (base64: string, name: string) => {
+    const link = document.createElement('a');
+    link.href = base64;
+    link.download = `حجز_${name}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const getContextMenuItems = (): ContextMenuItem[] => {
     if (!currentContextMenuData) return [];
     
@@ -485,6 +494,10 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
           },
           { label: r.isBooked ? '🟢 إلغاء النقل من السجلات المحجوزة' : '🟢 نقل الحجز إلى (السجلات المحجوزة)', onClick: () => onToggleBooking?.(r.id, !!r.isBooked, null) }
         );
+      }
+
+      if (r.bookingImage) {
+        items.push({ label: 'تنزيل صورة الحجز', onClick: () => downloadImage(r.bookingImage!, r.headFullName) });
       }
 
       items.push(

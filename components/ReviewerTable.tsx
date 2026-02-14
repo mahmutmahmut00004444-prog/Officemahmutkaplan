@@ -419,12 +419,21 @@ export default function ReviewerTable({
     }
   };
 
+  const downloadImage = (base64: string, name: string) => {
+    const link = document.createElement('a');
+    link.href = base64;
+    link.download = `حجز_${name}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const getContextMenuItems = (): ContextMenuItem[] => {
     if (!currentContextMenuData) return [];
     
     if (currentContextMenuData.type === 'head') {
       const r = currentContextMenuData.record!;
-      return [
+      const items: ContextMenuItem[] = [
         { 
           label: r.isUploaded ? '🟣 إلغاء حالة الرفع' : '🟣 تمييز كمرفوع بنجاح', 
           onClick: () => {
@@ -436,14 +445,22 @@ export default function ReviewerTable({
             }
           } 
         },
-        { label: r.isBooked ? '🟢 إلغاء النقل من السجلات المحجوزة' : '🟢 نقل الحجز إلى (السجلات المحجوزة)', onClick: () => onToggleBooking?.(r.id, !!r.isBooked, null) },
+        { label: r.isBooked ? '🟢 إلغاء النقل من السجلات المحجوزة' : '🟢 نقل الحجز إلى (السجلات المحجوزة)', onClick: () => onToggleBooking?.(r.id, !!r.isBooked, null) }
+      ];
+
+      if (r.bookingImage) {
+        items.push({ label: 'تنزيل صورة الحجز', onClick: () => downloadImage(r.bookingImage!, r.headFullName) });
+      }
+
+      items.push(
         { label: 'تعديل بيانات المراجع', onClick: () => onUpdate(r) },
         { label: 'رفع صورة الحجز (تحليل ذكي ⚡)', onClick: () => { setActiveReviewerId(r.id); fileInputRef.current?.click(); } },
         { isSeparator: true },
         { label: '⚡ قسم العائلة (فصل سجل)', onClick: () => openSplitFamilyModal(r) },
         { isSeparator: true },
         { label: 'حذف السجل نهائياً', onClick: () => setDeleteConfirm({ id: r.id, name: r.headFullName, type: 'head' }), isDestructive: true }
-      ];
+      );
+      return items;
     } else {
       const m = currentContextMenuData.member!;
       const parent = currentContextMenuData.parentRecord!;

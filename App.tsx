@@ -26,7 +26,8 @@ import SessionsManager from './components/SessionsManager';
 import OfficeSmartListImporter from './components/OfficeSmartListImporter'; 
 import TrashBin from './components/TrashBin'; 
 import UserActivityLog from './components/UserActivityLog'; 
-import UpdatePrompt from './components/UpdatePrompt'; // Import the new component
+import UpdatePrompt from './components/UpdatePrompt';
+import OfficeReceipts from './components/OfficeReceipts'; // Import new component
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { formatCurrency } from './lib/formatCurrency';
 import { GoogleGenAI } from '@google/genai';
@@ -1262,6 +1263,11 @@ const App: React.FC = () => {
                   <TrashBin onGoBack={onGoBack} showToast={showToast} onRestore={handleRestoreFromTrash} />
                 ) : currentView === 'USER_ACTIVITY' ? (
                   <UserActivityLog allOfficeUsers={allOfficeUsers} onGoBack={onGoBack} showToast={showToast} />
+                ) : currentView === 'OFFICE_RECEIPTS' ? (
+                  <OfficeReceipts 
+                    records={activeOfficeRecords} 
+                    onGoBack={onGoBack} 
+                  />
                 ) : null}
               </>
             )}
