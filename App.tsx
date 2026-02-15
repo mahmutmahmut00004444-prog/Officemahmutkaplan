@@ -1266,7 +1266,9 @@ const App: React.FC = () => {
                 ) : currentView === 'OFFICE_RECEIPTS' ? (
                   <OfficeReceipts 
                     records={activeOfficeRecords} 
-                    onGoBack={onGoBack} 
+                    onGoBack={onGoBack}
+                    loggedInUser={loggedInUser}
+                    allOfficeUsers={allOfficeUsers}
                   />
                 ) : null}
               </>

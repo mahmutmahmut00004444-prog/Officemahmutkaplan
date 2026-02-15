@@ -35,7 +35,7 @@ const SmartReader: React.FC<SmartReaderProps> = ({ reviewers, officeRecords, onA
             contents: {
               parts: [
                 { inlineData: { mimeType: file.type, data: cleanBase64 } },
-                { text: "استخرج البيانات التالية من صورة 'حجز موعد البطاقة الوطنية': 1. الاسم الكامل (name) 2. تاريخ الحجز (booking_date) بصيغة YYYY-MM-DD. أجب بصيغة JSON فقط." }
+                { text: "Extract the following data from the 'National Card Booking' image: 1. Full Name (name) 2. Booking Date (booking_date) strictly in YYYY-MM-DD format (e.g., if image says 2026/02/16, output 2026-02-16). Respond in JSON only." }
               ]
             }
           });
