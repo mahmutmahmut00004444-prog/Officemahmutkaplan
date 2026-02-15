@@ -642,7 +642,7 @@ const App: React.FC = () => {
         contents: {
           parts: [
             { inlineData: { mimeType: 'image/png', data: cleanBase64 } },
-            { text: "استخرج تاريخ الحجز (booking_date) بصيغة YYYY-MM-DD فقط من صورة حجز البطاقة الوطنية. أجب بصيغة JSON." }
+            { text: "Extract the exact 'Appointment Date' or 'Booking Date' (تاريخ الحجز / الموعد) from this receipt. Return ONLY the date in 'YYYY-MM-DD' format inside a JSON object { 'booking_date': 'YYYY-MM-DD' }. If not found, return null." }
           ]
         }
       });
@@ -669,10 +669,11 @@ const App: React.FC = () => {
       }
 
       await supabase.from(table).update(updatePayload).eq('id', id);
-      showToast(`تم النقل للمحجوزة بنجاح مع تثبيت الأسعار`, 'success');
+      const msg = res.booking_date ? `تم استخراج التاريخ: ${bookingDate} ✅` : `تم النقل (تعذر استخراج التاريخ) ⚠️`;
+      showToast(msg, 'success');
       await fetchAllData(true);
     } catch (e: any) {
-      showToast('فشل تحليل الصورة بشكل كامل', 'error');
+      showToast('فشل تحليل الصورة، تم الحفظ بتاريخ اليوم', 'error');
       await handleToggleBooking(type, id, false, null, imageData, new Date().toISOString().split('T')[0]);
     } finally { setIsSyncing(false); }
   };
