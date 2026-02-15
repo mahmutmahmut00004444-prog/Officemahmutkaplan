@@ -145,7 +145,7 @@ const LastUploadsModal: React.FC<LastUploadsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up" onClick={onClose}>
-      <div className="bg-white p-6 md:p-8 rounded-[2.5rem] w-full max-w-5xl max-h-[90vh] flex flex-col border-2 border-slate-900 shadow-2xl relative" onClick={e => e.stopPropagation()}>
+      <div className="bg-white p-6 md:p-8 rounded-[2.5rem] w-full max-w-5xl max-h-[90vh] flex flex-col border-2 border-slate-900 shadow-2xl relative overflow-hidden" onClick={e => e.stopPropagation()}>
         
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-slate-100 pb-4">

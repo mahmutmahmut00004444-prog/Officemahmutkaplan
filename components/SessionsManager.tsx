@@ -662,9 +662,9 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
 
       {/* Edit Session Modal */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-white p-6 rounded-[2rem] w-full max-w-sm border-2 border-slate-900 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-             <h3 className="text-xl font-black text-slate-900 mb-4">تعديل الجلسة</h3>
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up">
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm border-2 border-slate-900 shadow-2xl relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
+             <h3 className="text-xl font-black text-slate-900 mb-4 text-center">تعديل الجلسة</h3>
              <div className="space-y-3">
                 <div>
                   <label className="text-[10px] font-black text-slate-500 uppercase">الجهاز</label>
@@ -700,7 +700,7 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
              </div>
              <div className="flex gap-2 mt-6">
                <button onClick={saveEditedSession} disabled={isSubmitting} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black text-sm shadow-md active:scale-95 transition-all">{isSubmitting ? 'جاري الحفظ...' : 'حفظ التعديلات'}</button>
-               <button onClick={() => setIsEditModalOpen(false)} className="flex-1 bg-slate-100 text-slate-500 py-3 rounded-xl font-black text-sm">إلغاء</button>
+               <button onClick={() => setIsEditModalOpen(false)} className="flex-1 bg-slate-100 text-slate-500 py-3 rounded-xl font-black text-sm hover:bg-slate-200 transition-all">إلغاء</button>
              </div>
           </div>
         </div>
@@ -708,8 +708,8 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
 
       {/* Manual Date Booking Modal */}
       {isBookDateModalOpen && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-white p-6 rounded-[2rem] w-full max-w-xs border-2 border-slate-900 shadow-2xl text-center" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up">
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm border-2 border-slate-900 shadow-2xl text-center relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
              <h3 className="text-xl font-black text-slate-900 mb-2">تحديد تاريخ الحجز</h3>
              <p className="text-slate-500 font-bold text-xs mb-4">اكتب التاريخ يدوياً لتحديث حالة الرقم</p>
              <input 
@@ -723,7 +723,7 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
              />
              <div className="flex gap-2">
                <button onClick={confirmBookDate} disabled={isSubmitting || !manualBookDate} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-black text-sm shadow-md active:scale-95 transition-all">تأكيد الحجز</button>
-               <button onClick={() => setIsBookDateModalOpen(false)} className="flex-1 bg-slate-100 text-slate-500 py-3 rounded-xl font-black text-sm">إلغاء</button>
+               <button onClick={() => setIsBookDateModalOpen(false)} className="flex-1 bg-slate-100 text-slate-500 py-3 rounded-xl font-black text-sm hover:bg-slate-200 transition-all">إلغاء</button>
              </div>
           </div>
         </div>
@@ -731,9 +731,9 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
 
       {/* Add New Source Modal */}
       {isAddSourceModalOpen && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-white p-6 rounded-[2rem] w-full max-w-sm border-2 border-slate-900 shadow-2xl animate-scale-up" onClick={(e) => e.stopPropagation()}>
-             <h3 className="text-lg font-black text-slate-900 mb-4">إضافة مصدر جديد</h3>
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up">
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm border-2 border-slate-900 shadow-2xl relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
+             <h3 className="text-lg font-black text-slate-900 mb-4 text-center">إضافة مصدر جديد</h3>
              <input 
                autoFocus
                type="text" 
@@ -743,8 +743,8 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
                className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-sm outline-none focus:border-blue-500 mb-4"
              />
              <div className="flex gap-2">
-               <button onClick={handleAddNewSource} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black text-sm">إضافة</button>
-               <button onClick={() => setIsAddSourceModalOpen(false)} className="flex-1 bg-slate-100 text-slate-500 py-3 rounded-xl font-black text-sm">إلغاء</button>
+               <button onClick={handleAddNewSource} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black text-sm shadow-lg">إضافة</button>
+               <button onClick={() => setIsAddSourceModalOpen(false)} className="flex-1 bg-slate-100 text-slate-500 py-3 rounded-xl font-black text-sm hover:bg-slate-200 transition-all">إلغاء</button>
              </div>
           </div>
         </div>
@@ -752,8 +752,8 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
 
       {/* Confirmation Modal for Cooldown Change */}
       {isConfirmModalOpen && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-white p-8 rounded-[2rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl animate-scale-up" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up">
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
              <h3 className="text-xl font-black text-slate-900 mb-4">تأكيد تغيير مدة الصلاحية</h3>
              <p className="text-slate-500 font-bold text-sm mb-6">هل أنت متأكد من تغيير مدة صلاحية الرقم إلى <span className="text-blue-600 font-black text-lg">{tempCooldownDays}</span> يوم؟</p>
              <p className="text-red-500 font-bold text-xs mb-2">اكتب كلمة "تأكيد" للمتابعة:</p>
@@ -766,8 +766,8 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
                className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-sm outline-none focus:border-blue-500 mb-6 text-center"
              />
              <div className="flex gap-2">
-               <button onClick={handleUpdateCooldown} disabled={confirmationText.trim() !== 'تأكيد'} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black text-sm disabled:opacity-50">حفظ التغيير</button>
-               <button onClick={() => { setIsConfirmModalOpen(false); setTempCooldownDays(actualCooldownDays); setConfirmationText(''); }} className="flex-1 bg-slate-100 text-slate-500 py-3 rounded-xl font-black text-sm">إلغاء</button>
+               <button onClick={handleUpdateCooldown} disabled={confirmationText.trim() !== 'تأكيد'} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black text-sm disabled:opacity-50 shadow-lg">حفظ التغيير</button>
+               <button onClick={() => { setIsConfirmModalOpen(false); setTempCooldownDays(actualCooldownDays); setConfirmationText(''); }} className="flex-1 bg-slate-100 text-slate-500 py-3 rounded-xl font-black text-sm hover:bg-slate-200 transition-all">إلغاء</button>
              </div>
           </div>
         </div>
@@ -775,15 +775,15 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
 
       {/* Delete Confirmation Modal */}
       {deleteConfirmSession && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl animate-scale-up" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up">
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-2xl font-black mb-3 text-red-600">تأكيد الحذف</h3>
             <p className="text-slate-500 mb-8 font-bold text-sm leading-relaxed">
               هل أنت متأكد من حذف الرقم <span className="text-slate-900 font-black" dir="ltr">{deleteConfirmSession.phoneNumber}</span>؟
             </p>
             <div className="flex flex-col gap-3">
               <button onClick={confirmDeleteSession} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black text-lg shadow-xl active:scale-95 transition-all">موافق (حذف)</button>
-              <button onClick={() => setDeleteConfirmSession(null)} className="w-full text-slate-400 font-black py-2">إلغاء</button>
+              <button onClick={() => setDeleteConfirmSession(null)} className="w-full text-slate-400 font-black py-2 hover:bg-slate-50 rounded-xl transition-all">إلغاء</button>
             </div>
           </div>
         </div>
@@ -791,15 +791,15 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
 
       {/* Cancel All Uploads Confirmation Modal */}
       {showBulkCancelConfirm && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl animate-scale-up" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up">
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-2xl font-black mb-3 text-red-600">إلغاء جميع الرفوعات</h3>
             <p className="text-slate-500 mb-8 font-bold text-sm leading-relaxed">
               هل أنت متأكد من إلغاء حالة الرفع لجميع الجلسات في النظام؟
             </p>
             <div className="flex flex-col gap-3">
               <button onClick={handleCancelAllUploads} disabled={isSubmitting} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black text-lg shadow-xl active:scale-95 transition-all">نعم، إلغاء الجميع</button>
-              <button onClick={() => setShowBulkCancelConfirm(false)} className="w-full text-slate-400 font-black py-2">تراجع</button>
+              <button onClick={() => setShowBulkCancelConfirm(false)} className="w-full text-slate-400 font-black py-2 hover:bg-slate-50 rounded-xl transition-all">تراجع</button>
             </div>
           </div>
         </div>
@@ -807,15 +807,15 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
 
       {/* Bulk Delete Selected Confirmation Modal */}
       {showBulkDeleteSelectedConfirm && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl animate-scale-up" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up">
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-2xl font-black mb-3 text-red-600">حذف الجلسات المحددة</h3>
             <p className="text-slate-500 mb-8 font-bold text-sm leading-relaxed">
               هل أنت متأكد من حذف <span className="text-red-600 font-black">{selectedIds.size}</span> جلسات بشكل نهائي؟ لا يمكن التراجع عن هذا الإجراء.
             </p>
             <div className="flex flex-col gap-3">
               <button onClick={handleBulkDeleteSelected} disabled={isSubmitting} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black text-lg shadow-xl active:scale-95 transition-all">تأكيد الحذف</button>
-              <button onClick={() => setShowBulkDeleteSelectedConfirm(false)} className="w-full text-slate-400 font-black py-2">إلغاء</button>
+              <button onClick={() => setShowBulkDeleteSelectedConfirm(false)} className="w-full text-slate-400 font-black py-2 hover:bg-slate-50 rounded-xl transition-all">إلغاء</button>
             </div>
           </div>
         </div>

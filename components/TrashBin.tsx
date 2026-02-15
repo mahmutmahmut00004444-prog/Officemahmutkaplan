@@ -98,12 +98,12 @@ const TrashBin: React.FC<TrashBinProps> = ({ onGoBack, showToast, onRestore }) =
       {/* نافذة التفاصيل والخيارات (تظهر عند الضغط على الاسم) */}
       {selectedItem && !showRestoreConfirm && !showDeleteConfirm && (
         <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up" onClick={() => setSelectedItem(null)}>
-          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-lg border-2 border-slate-900 shadow-2xl relative" onClick={e => e.stopPropagation()}>
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-lg border-2 border-slate-900 shadow-2xl relative overflow-hidden" onClick={e => e.stopPropagation()}>
              <button onClick={() => setSelectedItem(null)} className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition-colors">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
              </button>
              
-             <h3 className="text-2xl font-black text-slate-900 mb-2 text-center">خيارات السجل المحذوف</h3>
+             <h3 className="text-2xl font-black text-slate-900 mb-2 text-center pt-4">خيارات السجل المحذوف</h3>
              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-6 text-center">
                 <p className="text-xl font-black text-slate-800 mb-1">{selectedItem.full_name}</p>
                 <p className="text-sm font-bold text-slate-500">
@@ -145,7 +145,7 @@ const TrashBin: React.FC<TrashBinProps> = ({ onGoBack, showToast, onRestore }) =
       {/* نافذة تأكيد الاسترجاع */}
       {showRestoreConfirm && selectedItem && (
         <div className="fixed inset-0 z-[3100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-scale-up">
-           <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-md text-center border-2 border-slate-900 shadow-2xl">
+           <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-md text-center border-2 border-slate-900 shadow-2xl relative overflow-hidden">
               <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
               </div>
@@ -177,7 +177,7 @@ const TrashBin: React.FC<TrashBinProps> = ({ onGoBack, showToast, onRestore }) =
       {/* نافذة تأكيد الحذف النهائي */}
       {showDeleteConfirm && selectedItem && (
         <div className="fixed inset-0 z-[3100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-scale-up">
-           <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-md text-center border-2 border-slate-900 shadow-2xl">
+           <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-md text-center border-2 border-slate-900 shadow-2xl relative overflow-hidden">
               <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
               </div>

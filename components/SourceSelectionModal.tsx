@@ -40,7 +40,7 @@ const SourceSelectionModal: React.FC<SourceSelectionModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up" onClick={onClose}>
-      <div className="bg-white p-6 rounded-[2rem] w-full max-w-md flex flex-col text-center border-2 border-slate-900 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-md flex flex-col text-center border-2 border-slate-900 shadow-2xl relative overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-xl font-black mb-4 text-slate-900">{title}</h3>
         <p className="text-slate-500 font-bold text-sm mb-4">يرجى تحديد المصدر الذي تم رفع المعاملة عليه</p>
 
@@ -65,7 +65,7 @@ const SourceSelectionModal: React.FC<SourceSelectionModalProps> = ({
 
         <div className="flex gap-2">
           <button onClick={() => onSelectSource(selectedSourceId)} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black shadow-lg active:scale-95 transition-all">تأكيد الرفع</button>
-          <button onClick={onClose} className="flex-1 bg-slate-100 text-slate-500 py-3 rounded-xl font-black">إلغاء</button>
+          <button onClick={onClose} className="flex-1 bg-slate-100 text-slate-500 py-3 rounded-xl font-black hover:bg-slate-200 transition-all">إلغاء</button>
         </div>
       </div>
     </div>

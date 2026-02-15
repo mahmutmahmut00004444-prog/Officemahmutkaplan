@@ -22,6 +22,7 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
   // Data
   const [trashReceipts, setTrashReceipts] = useState<OfficeRecord[]>([]);
   const [isLoadingTrash, setIsLoadingTrash] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); // For share/download loading state
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -148,6 +149,13 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
     }
   };
 
+  // Helper to convert Base64 to File object
+  const dataURLtoFile = async (dataurl: string, filename: string) => {
+    const res = await fetch(dataurl);
+    const blob = await res.blob();
+    return new File([blob], filename, { type: 'image/png' });
+  };
+
   const downloadImage = (base64: string, name: string) => {
     const link = document.createElement('a');
     link.href = base64;
@@ -157,22 +165,66 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
     document.body.removeChild(link);
   };
 
-  const handleBulkDownload = () => {
+  const handleBulkDownload = async () => {
     const selectedRecords = currentFolderRecords.filter(r => selectedIds.has(r.id));
     if (selectedRecords.length === 0) return;
     
-    let delay = 0;
-    selectedRecords.forEach(record => {
-        setTimeout(() => {
-            if (record.bookingImage) downloadImage(record.bookingImage, record.headFullName);
-        }, delay);
-        delay += 500;
-    });
+    setIsProcessing(true);
+    
+    // Sequential download with delay to prevent browser blocking
+    for (let i = 0; i < selectedRecords.length; i++) {
+        const record = selectedRecords[i];
+        if (record.bookingImage) {
+            downloadImage(record.bookingImage, record.headFullName);
+            // Wait 500ms between downloads
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+    }
+    
+    setIsProcessing(false);
     setSelectedIds(new Set());
   };
 
-  const handleSend = () => {
-      alert(`سيتم إرسال ${selectedIds.size} وصل (يرجى التنزيل ثم الإرسال يدوياً).`);
+  const handleSend = async () => {
+      const selectedRecords = currentFolderRecords.filter(r => selectedIds.has(r.id));
+      if (selectedRecords.length === 0) return;
+
+      setIsProcessing(true);
+
+      try {
+        if (navigator.share) {
+            const filesArray = await Promise.all(
+                selectedRecords.map(r => 
+                    dataURLtoFile(r.bookingImage!, `وصل_${r.headFullName.replace(/\s/g, '_')}.png`)
+                )
+            );
+
+            // Check if data is valid for sharing
+            if (navigator.canShare && navigator.canShare({ files: filesArray })) {
+                await navigator.share({
+                    files: filesArray,
+                    title: 'صور الحجوزات',
+                    text: `تم إرفاق ${filesArray.length} وصل حجز.`
+                });
+                setSelectedIds(new Set()); // Clear selection on success
+            } else {
+                alert('عذراً، متصفحك لا يدعم مشاركة هذا العدد من الملفات أو نوعها دفعة واحدة.');
+            }
+        } else {
+            alert('المشاركة غير مدعومة في هذا المتصفح. يرجى استخدام متصفح حديث (Chrome/Safari) على الهاتف.');
+        }
+      } catch (error: any) {
+        // Handle AbortError (User cancelled share sheet) gracefully
+        if (error.name === 'AbortError' || error.message?.includes('canceled') || error.message?.includes('cancelled')) {
+            console.log('User cancelled sharing');
+            // Do not show an alert for cancellation
+        } else {
+            console.error("Error sharing files:", error);
+            alert(`حدث خطأ أثناء محاولة المشاركة: ${error.message}`);
+        }
+      } finally {
+        setIsProcessing(false);
+      }
   };
 
   return (
@@ -245,20 +297,22 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
           {/* DETAIL VIEW (Grid of Images for Selected Date) */}
           {selectedDateFolder && (
              <div className="flex-1 flex flex-col animate-scale-up">
-                {/* Toolbar */}
-                <div className="bg-slate-50 p-4 rounded-3xl border border-slate-200 mb-6 space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                        <input 
-                        type="text" 
-                        placeholder="بحث عن اسم المراجع..." 
-                        value={searchQuery} 
-                        onChange={e => setSearchQuery(e.target.value)} 
-                        className="w-full h-11 px-4 rounded-xl border border-slate-200 font-bold text-xs outline-none focus:border-emerald-500" 
-                        />
+                {/* Unified Toolbar - Matches ReviewerTable/OfficeTable Style */}
+                <div className="bg-white p-3 rounded-2xl border-2 border-slate-900 shadow-sm mb-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 items-center">
+                        <div className="md:col-span-2">
+                            <input 
+                            type="text" 
+                            placeholder="بحث عن اسم المراجع..." 
+                            value={searchQuery} 
+                            onChange={e => setSearchQuery(e.target.value)} 
+                            className="w-full h-9 px-4 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-black outline-none" 
+                            />
+                        </div>
                         <select 
                         value={activeCircle} 
                         onChange={e => setActiveCircle(e.target.value)}
-                        className="w-full h-11 px-2 rounded-xl border border-slate-200 font-bold text-xs outline-none focus:border-emerald-500"
+                        className="h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none cursor-pointer"
                         >
                         <option value="ALL">جميع الدوائر</option>
                         {Object.values(CIRCLE_NAMES).map((name, idx) => (
@@ -269,7 +323,7 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
                             <select 
                                 value={selectedOffice} 
                                 onChange={e => setSelectedOffice(e.target.value)}
-                                className="w-full h-11 px-2 rounded-xl border border-slate-200 font-bold text-xs outline-none focus:border-emerald-500"
+                                className="h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none cursor-pointer"
                             >
                                 <option value="ALL">جميع المكاتب</option>
                                 {allOfficeUsers.map(u => (
@@ -277,32 +331,37 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
                                 ))}
                             </select>
                         )}
-                    </div>
-                    
-                    {/* Bulk Actions */}
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-                        <div className="flex items-center gap-2">
-                            <input 
-                                type="checkbox" 
-                                checked={selectedIds.size === currentFolderRecords.length && currentFolderRecords.length > 0} 
-                                onChange={toggleSelectAll}
-                                className="w-5 h-5 accent-emerald-600 cursor-pointer"
-                            />
-                            <span className="text-xs font-black text-slate-600">تحديد الكل ({currentFolderRecords.length})</span>
-                        </div>
                         
-                        {isSelectionMode && (
-                            <div className="flex gap-2">
-                                <button onClick={handleBulkDownload} className="bg-slate-900 text-white px-4 py-2 rounded-xl font-black text-xs shadow-md active:scale-95 transition-all flex items-center gap-1">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                                    تنزيل ({selectedIds.size})
-                                </button>
-                                <button onClick={handleSend} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-black text-xs shadow-md active:scale-95 transition-all flex items-center gap-1">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                                    إرسال
-                                </button>
+                        <div className="flex items-center gap-2 md:col-span-2 justify-end">
+                            <div className="flex items-center gap-2 bg-slate-50 px-3 py-1 rounded-lg border border-slate-100">
+                                <input 
+                                    type="checkbox" 
+                                    checked={selectedIds.size === currentFolderRecords.length && currentFolderRecords.length > 0} 
+                                    onChange={toggleSelectAll}
+                                    className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                                />
+                                <span className="text-[10px] font-black text-slate-600">تحديد الكل</span>
                             </div>
-                        )}
+                            
+                            {isSelectionMode && (
+                                <>
+                                    <button 
+                                    onClick={handleBulkDownload} 
+                                    disabled={isProcessing}
+                                    className="h-9 bg-slate-900 text-white px-3 rounded-lg font-black text-[10px] shadow-sm active:scale-95 transition-all flex items-center gap-1 disabled:opacity-70"
+                                    >
+                                        {isProcessing ? '...' : `تنزيل (${selectedIds.size})`}
+                                    </button>
+                                    <button 
+                                    onClick={handleSend} 
+                                    disabled={isProcessing}
+                                    className="h-9 bg-blue-600 text-white px-3 rounded-lg font-black text-[10px] shadow-sm active:scale-95 transition-all flex items-center gap-1 disabled:opacity-70"
+                                    >
+                                        {isProcessing ? '...' : 'إرسال'}
+                                    </button>
+                                </>
+                            )}
+                        </div>
                     </div>
                 </div>
 

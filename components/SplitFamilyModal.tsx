@@ -49,7 +49,7 @@ const SplitFamilyModal: React.FC<SplitFamilyModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up" onClick={onClose}>
-      <div className="bg-white p-6 rounded-[2.5rem] w-full max-w-lg border-2 border-slate-900 shadow-2xl relative flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
+      <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-lg border-2 border-slate-900 shadow-2xl relative flex flex-col max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="text-center mb-6">
             <h3 className="text-2xl font-black text-slate-900">قسم العائلة</h3>
             <p className="text-sm font-bold text-slate-500 mt-1">العائلة الحالية: <span className="text-blue-600">{currentHeadName}</span></p>
@@ -97,13 +97,13 @@ const SplitFamilyModal: React.FC<SplitFamilyModalProps> = ({
             <button 
                 onClick={() => newHeadId && onConfirm(Array.from(selectedIds), newHeadId)} 
                 disabled={!isValid || isProcessing}
-                className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black text-lg shadow-xl active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 bg-indigo-600 text-white py-4 rounded-xl font-black text-lg shadow-xl active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 {isProcessing ? 'جاري الفصل...' : 'تأكيد القسم وإنشاء السجل'}
             </button>
             <button 
                 onClick={onClose} 
-                className="w-1/3 bg-slate-100 text-slate-500 py-4 rounded-2xl font-black active:scale-95 transition-all hover:bg-slate-200"
+                className="w-1/3 bg-slate-100 text-slate-500 py-4 rounded-xl font-black active:scale-95 transition-all hover:bg-slate-200"
             >
                 إلغاء
             </button>
