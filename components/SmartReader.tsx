@@ -35,7 +35,7 @@ const SmartReader: React.FC<SmartReaderProps> = ({ reviewers, officeRecords, onA
             contents: {
               parts: [
                 { inlineData: { mimeType: file.type, data: cleanBase64 } },
-                { text: "Extract the following data from the 'National Card Booking' image: 1. Full Name (name) 2. Booking Date (booking_date) strictly in YYYY-MM-DD format (e.g., if image says 2026/02/16, output 2026-02-16). Respond in JSON only." }
+                { text: "Analyze this Iraqi National Card booking receipt. Extract: 1. Full Name (name). 2. **Appointment Date** (booking_date) - Look for 'تاريخ الموعد' or 'موعد الحجز'. Strictly format as YYYY-MM-DD. Ignore birth dates or print dates. Respond in JSON only: { name: string, booking_date: string }." }
               ]
             }
           });

@@ -81,9 +81,6 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
         const dateObj = record.bookingCreatedAt ? new Date(record.bookingCreatedAt) : new Date(record.createdAt);
         const dateKey = dateObj.toLocaleDateString('en-CA'); // YYYY-MM-DD format
         
-        // Apply global office filter here if Admin wants to see specific office folders only?
-        // Let's keep folders global, and filter INSIDE folders for admin/office specific permissions.
-        
         // However, standard user permission filtering applies:
         if (!isAdmin && loggedInUser && record.affiliation !== loggedInUser.username) {
             return; // Skip records not belonging to user
@@ -101,6 +98,12 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
   const sortedDates = useMemo(() => {
       return Object.keys(groupedByDate).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
   }, [groupedByDate]);
+
+  // Helper to get Day Name in Arabic
+  const getDayName = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('ar-IQ', { weekday: 'long' });
+  };
 
   // Filtered Records for the CURRENTLY OPEN FOLDER
   const currentFolderRecords = useMemo(() => {
@@ -189,20 +192,26 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
           <div className="flex flex-col gap-4 mb-6">
              <h2 className="text-3xl font-black text-slate-900 flex items-center gap-3">
                <span className="text-emerald-600">🗂️</span>
-               {selectedDateFolder ? `أرشيف يوم: ${selectedDateFolder}` : 'أرشيف الوصولات اليومي'}
+               {selectedDateFolder ? (
+                 <div className="flex items-center gap-2">
+                    <span>وصولات يوم:</span>
+                    <span className="text-emerald-600 underline decoration-wavy decoration-emerald-300">{getDayName(selectedDateFolder)}</span>
+                    <span className="text-lg text-slate-400 font-bold">({selectedDateFolder})</span>
+                 </div>
+               ) : 'أرشيف الوصولات اليومي'}
              </h2>
              {!selectedDateFolder && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-start gap-3">
                     <svg className="w-6 h-6 text-emerald-600 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                     <div>
                         <p className="font-black text-emerald-800 text-sm">نظام الأرشفة التلقائي:</p>
-                        <p className="text-xs font-bold text-emerald-700 mt-1">يتم حفظ الوصولات وتجميعها في مجلدات حسب تاريخ الرفع. اضغط على التاريخ لعرض الوصولات.</p>
+                        <p className="text-xs font-bold text-emerald-700 mt-1">يتم حفظ الوصولات وتجميعها في مجلدات حسب تاريخ الرفع. اضغط على اليوم لعرض الوصولات.</p>
                     </div>
                 </div>
              )}
           </div>
 
-          {/* FOLDER VIEW (List of Dates) */}
+          {/* FOLDER VIEW (List of Dates as Days) */}
           {!selectedDateFolder && (
              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 animate-scale-up">
                 {isLoadingTrash && <div className="col-span-full py-4 text-center text-slate-400 font-bold animate-pulse">جاري تحديث الأرشيف...</div>}
@@ -210,21 +219,25 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
                 {sortedDates.length === 0 && !isLoadingTrash ? (
                     <div className="col-span-full py-20 text-center text-slate-300 font-black text-xl italic">لا توجد وصولات محفوظة.</div>
                 ) : (
-                    sortedDates.map(date => (
-                        <button 
-                            key={date} 
-                            onClick={() => setSelectedDateFolder(date)}
-                            className="bg-slate-50 hover:bg-emerald-50 border-2 border-slate-200 hover:border-emerald-300 rounded-[2rem] p-6 flex flex-col items-center justify-center gap-3 transition-all group shadow-sm hover:shadow-md active:scale-95"
-                        >
-                            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
-                                <svg className="w-8 h-8 text-slate-400 group-hover:text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
-                            </div>
-                            <div className="text-center">
-                                <span className="block font-black text-slate-800 text-sm">{date}</span>
-                                <span className="block text-[10px] font-bold text-slate-400 mt-1">{groupedByDate[date].length} وصل</span>
-                            </div>
-                        </button>
-                    ))
+                    sortedDates.map(date => {
+                        const dayName = getDayName(date);
+                        return (
+                            <button 
+                                key={date} 
+                                onClick={() => setSelectedDateFolder(date)}
+                                className="bg-slate-50 hover:bg-emerald-50 border-2 border-slate-200 hover:border-emerald-300 rounded-[2rem] p-6 flex flex-col items-center justify-center gap-3 transition-all group shadow-sm hover:shadow-md active:scale-95"
+                            >
+                                <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform border border-slate-100">
+                                    <span className="text-3xl">📅</span>
+                                </div>
+                                <div className="text-center w-full">
+                                    <span className="block font-black text-emerald-700 text-lg mb-1">{dayName}</span>
+                                    <span className="block font-bold text-slate-500 text-xs dir-ltr bg-slate-200/50 rounded-lg py-1 px-2">{date}</span>
+                                    <span className="block text-[10px] font-black text-slate-400 mt-2 border-t border-slate-200 pt-1 w-full">{groupedByDate[date].length} وصل</span>
+                                </div>
+                            </button>
+                        );
+                    })
                 )}
              </div>
           )}

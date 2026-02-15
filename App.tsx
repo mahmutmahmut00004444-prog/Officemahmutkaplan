@@ -642,7 +642,7 @@ const App: React.FC = () => {
         contents: {
           parts: [
             { inlineData: { mimeType: 'image/png', data: cleanBase64 } },
-            { text: "Extract the exact 'Appointment Date' or 'Booking Date' (تاريخ الحجز / الموعد) from this receipt. Return ONLY the date in 'YYYY-MM-DD' format inside a JSON object { 'booking_date': 'YYYY-MM-DD' }. If not found, return null." }
+            { text: "Analyze this Iraqi National Card booking receipt. Find the **Appointment Date** (often labeled as 'تاريخ الموعد' or 'موعد الحجز' or just a date in a box separate from personal info). Convert it to YYYY-MM-DD. Return JSON: `{'booking_date': 'YYYY-MM-DD'}`. Do NOT use the Date of Birth or Print Date." }
           ]
         }
       });
