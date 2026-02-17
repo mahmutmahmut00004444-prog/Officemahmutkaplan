@@ -627,22 +627,31 @@ const App: React.FC = () => {
     try {
       const { familyMembers, createdAt, ...rest } = reviewer;
       const dbReviewer = {
-        ...rest,
+        id: rest.id,
         circle_type: rest.circleType,
         head_full_name: rest.headFullName,
         head_surname: rest.headSurname,
         head_mother_name: rest.headMotherName,
         head_dob: rest.headDob,
         head_phone: rest.headPhone,
-        paid_amount: rest.paidAmount || 0,
-        remaining_amount: rest.remainingAmount || 0,
-        created_at: new Date(createdAt).toISOString(),
+        paid_amount: rest.paidAmount ? parseFloat(rest.paidAmount) : 0,
+        remaining_amount: rest.remainingAmount ? parseFloat(rest.remainingAmount) : 0,
+        notes: rest.notes,
+        booking_image: rest.bookingImage,
+        booking_date: rest.bookingDate,
+        booking_created_at: rest.bookingCreatedAt ? new Date(rest.bookingCreatedAt).toISOString() : null,
+        is_booked: rest.isBooked,
+        is_archived: rest.isArchived,
+        booked_source_id: rest.bookedSourceId,
+        is_uploaded: rest.isUploaded,
+        uploaded_source_id: rest.uploadedSourceId,
         booked_price_right_mosul: rest.bookedPriceRightMosul,
         booked_price_left_mosul: rest.bookedPriceLeftMosul,
         booked_price_others: rest.bookedPriceOthers,
         booked_price_hammam_alalil: rest.bookedPriceHammamAlAlil,
         booked_price_alshoura: rest.bookedPriceAlShoura,
         booked_price_baaj: rest.bookedPriceBaaj,
+        created_at: new Date(createdAt).toISOString(),
       };
 
       const { error } = await supabase.from('reviewers').upsert(dbReviewer);
@@ -676,16 +685,30 @@ const App: React.FC = () => {
     try {
         const { familyMembers, createdAt, ...rest } = record;
         const dbRecord = {
-            ...rest,
-            circle_type: rest.circleType,
-            head_full_name: rest.headFullName,
-            head_surname: rest.headSurname,
-            head_mother_name: rest.headMotherName,
-            head_dob: rest.headDob,
-            head_phone: rest.headPhone,
-            affiliation: rest.affiliation,
-            table_number: rest.tableNumber,
-            created_at: new Date(createdAt).toISOString()
+            id: record.id,
+            circle_type: record.circleType,
+            head_full_name: record.headFullName,
+            head_surname: record.headSurname,
+            head_mother_name: record.headMotherName,
+            head_dob: record.headDob,
+            head_phone: record.headPhone,
+            affiliation: record.affiliation,
+            table_number: record.tableNumber,
+            booking_image: record.bookingImage,
+            booking_date: record.bookingDate,
+            booking_created_at: record.bookingCreatedAt ? new Date(record.bookingCreatedAt).toISOString() : null,
+            is_booked: record.isBooked,
+            is_archived: record.isArchived,
+            booked_source_id: record.bookedSourceId,
+            is_uploaded: record.isUploaded,
+            uploaded_source_id: record.uploadedSourceId,
+            booked_price_right_mosul: record.bookedPriceRightMosul,
+            booked_price_left_mosul: record.bookedPriceLeftMosul,
+            booked_price_others: record.bookedPriceOthers,
+            booked_price_hammam_alalil: record.bookedPriceHammamAlAlil,
+            booked_price_alshoura: record.bookedPriceAlShoura,
+            booked_price_baaj: record.bookedPriceBaaj,
+            created_at: new Date(record.createdAt).toISOString()
         };
 
         const { error } = await supabase.from('office_records').upsert(dbRecord);
@@ -710,15 +733,14 @@ const App: React.FC = () => {
         if(editingOffice) setEditingOffice(null);
         if (isAdmin) setCurrentView('OFFICE_ALL');
     } catch (e: any) {
+        // Log the actual error to understand why it failed
+        console.error("Failed to save office record:", e);
         throw e;
     }
   };
 
   const onDeleteReviewer = async (id: string) => {
     try {
-        // Move to recycle bin first (handled by DB triggers or manual insert if needed, assuming direct delete here based on previous code)
-        // Actually, let's just do hard delete as per previous logic or use recycle bin logic if implemented.
-        // Assuming 'recycle_bin' table exists, we should probably insert there first.
         const reviewer = reviewers.find(r => r.id === id);
         if (reviewer) {
             await supabase.from('recycle_bin').insert({
@@ -1038,6 +1060,14 @@ const App: React.FC = () => {
                   onDelete={(type, id) => onDeleteReviewer(id)} // Generalized delete
                   onArchive={(type, id) => supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').update({ is_archived: true }).eq('id', id).then(() => { showToast('تمت الأرشفة', 'success'); fetchAllData(true); })}
                   loggedInUser={loggedInUser}
+                />
+            ) : currentView === 'SETTINGS' ? (
+                <SettingsPage 
+                  onNavigate={(view) => onNavigate(view)}
+                  onResetClick={() => setShowResetModal(true)}
+                  onGoBack={onGoBack}
+                  loggedInUser={loggedInUser}
+                  onChangeAdminPassword={handleChangeAdminPassword}
                 />
             ) : currentView === 'OFFICE_STATEMENT' && currentViewData ? (
                 <OfficeStatement 

@@ -136,14 +136,25 @@ const OfficeForm: React.FC<OfficeFormProps> = ({ onSave, onGoBack, initialData, 
     e.preventDefault();
     if (isDisabled) return; 
 
-    // Validation: Circle Type is mandatory
+    // 1. Determine Correct Affiliation
+    // If office user, force username. If admin, use selected value.
+    const finalAffiliation = isOfficeUser && loggedInUser?.username 
+        ? loggedInUser.username 
+        : formData.affiliation;
+
+    // Validation
     if (!formData.circleType) {
       showToast("يرجى اختيار الدائرة", 'error');
       return;
     }
 
-    if (!formData.affiliation) {
-      showToast("يرجى اختيار المكتب", 'error');
+    if (!finalAffiliation) {
+      showToast("يرجى التأكد من اسم المكتب (غير محدد)", 'error');
+      return;
+    }
+
+    if (!formData.headFullName.trim()) {
+      showToast("يرجى إدخال الاسم الكامل", 'error');
       return;
     }
 
@@ -158,12 +169,15 @@ const OfficeForm: React.FC<OfficeFormProps> = ({ onSave, onGoBack, initialData, 
 
       const recordId = initialData?.id || `OFF-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
 
-      await onSave({
+      const payload: OfficeRecord = {
         id: recordId,
         ...formData,
+        affiliation: finalAffiliation, // Ensure correct affiliation is passed
         familyMembers: finalFamily,
         createdAt: initialData?.createdAt || Date.now()
-      });
+      };
+
+      await onSave(payload);
 
       if (!isEditMode) {
         setFormData((prev: any) => ({
@@ -173,15 +187,16 @@ const OfficeForm: React.FC<OfficeFormProps> = ({ onSave, onGoBack, initialData, 
           headMotherName: '',
           headDob: '',
           headPhone: '',
-          bookingImage: ''
-          // NOTE: We do NOT reset circleType here, so it persists.
+          bookingImage: '',
+          // Keep affiliation and circleType for faster entry
+          affiliation: finalAffiliation
         }));
         setFamilyMembers([]);
         window.scrollTo({ top: 300, behavior: 'smooth' }); 
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Save failed:", err);
-      showToast("حدث خطأ أثناء الحفظ", 'error');
+      showToast(`حدث خطأ أثناء الحفظ: ${err.message || 'خطأ غير معروف'}`, 'error');
     } finally {
       setIsSubmitting(false);
     }
