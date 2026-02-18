@@ -8,9 +8,10 @@ interface OfficeReceiptsProps {
   onGoBack: () => void;
   loggedInUser: LoggedInUser | null;
   allOfficeUsers: OfficeUser[];
+  onDeleteReceipt: (id: string) => Promise<void>; // New Prop
 }
 
-export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOfficeUsers }: OfficeReceiptsProps) {
+export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOfficeUsers, onDeleteReceipt }: OfficeReceiptsProps) {
   // State for Navigation and Views
   const [selectedDateFolder, setSelectedDateFolder] = useState<string | null>(null);
 
@@ -22,11 +23,14 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
   // Data
   const [trashReceipts, setTrashReceipts] = useState<OfficeRecord[]>([]);
   const [isLoadingTrash, setIsLoadingTrash] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false); // For share/download loading state
+  const [isProcessing, setIsProcessing] = useState(false); // For share/download/delete loading state
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const isSelectionMode = selectedIds.size > 0;
+
+  // Modal State
+  const [recordToDelete, setRecordToDelete] = useState<OfficeRecord | null>(null);
 
   const isAdmin = loggedInUser?.role === 'ADMIN';
 
@@ -58,7 +62,7 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
            };
         });
         setTrashReceipts(recovered);
-      } catch (e) {
+      } catch (e: any) {
         console.error("Error fetching trash receipts", e);
       } finally {
         setIsLoadingTrash(false);
@@ -177,7 +181,7 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
         if (record.bookingImage) {
             downloadImage(record.bookingImage, record.headFullName);
             // Wait 500ms between downloads
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
         }
     }
     
@@ -213,22 +217,99 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
         } else {
             alert('المشاركة غير مدعومة في هذا المتصفح. يرجى استخدام متصفح حديث (Chrome/Safari) على الهاتف.');
         }
-      } catch (error: any) {
+      } catch (err: any) {
         // Handle AbortError (User cancelled share sheet) gracefully
-        if (error.name === 'AbortError' || error.message?.includes('canceled') || error.message?.includes('cancelled')) {
+        const errorName = err?.name;
+        const errorMessage = err?.message;
+        
+        if (
+            errorName === 'AbortError' || 
+            (typeof errorMessage === 'string' && (errorMessage.includes('canceled') || errorMessage.includes('cancelled')))
+        ) {
             console.log('User cancelled sharing');
             // Do not show an alert for cancellation
         } else {
-            console.error("Error sharing files:", error);
-            alert(`حدث خطأ أثناء محاولة المشاركة: ${error.message}`);
+            console.error("Error sharing files:", err);
+            alert(`حدث خطأ أثناء محاولة المشاركة: ${String(errorMessage) || 'Unknown error'}`);
         }
       } finally {
         setIsProcessing(false);
       }
   };
 
+  // --- Deletion Logic ---
+  const handleSingleDeleteRequest = (record: OfficeRecord) => {
+    if (!isAdmin) return;
+    setRecordToDelete(record);
+  };
+
+  const confirmDelete = async () => {
+    if (!recordToDelete) return;
+    setIsProcessing(true);
+    try {
+        await onDeleteReceipt(recordToDelete.id);
+        setRecordToDelete(null);
+    } catch (e: any) {
+        console.error(e);
+    } finally {
+        setIsProcessing(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!isAdmin) return;
+    const count = selectedIds.size;
+    if (count === 0) return;
+
+    if (confirm(`هل أنت متأكد من حذف ${count} وصولات محددة؟\n\nسيتم إزالة الصور وإلغاء حالة الحجز لجميع السجلات المحددة.`)) {
+        setIsProcessing(true);
+        try {
+            const ids = Array.from(selectedIds);
+            // Execute deletions sequentially or in parallel depending on the API design
+            // Here we just loop through them as `onDeleteReceipt` handles one
+            for (const id of ids) {
+                await onDeleteReceipt(id);
+            }
+            setSelectedIds(new Set());
+        } catch (e: any) {
+            console.error(e);
+        } finally {
+            setIsProcessing(false);
+        }
+    }
+  };
+
+  // Helper to reset filters
+  const resetFilters = () => {
+    setSearchQuery('');
+    setActiveCircle('ALL');
+    setSelectedOffice('ALL');
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-40 animate-scale-up">
+      {/* Custom Delete Confirmation Modal */}
+      {recordToDelete && (
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up">
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl relative overflow-hidden">
+            <h3 className="text-xl font-black mb-4 text-red-600">تأكيد حذف الوصل</h3>
+            <p className="text-slate-500 font-bold mb-6 text-sm leading-relaxed">
+              هل أنت متأكد من حذف صورة الحجز للمراجع <span className="text-slate-900">"{recordToDelete.headFullName}"</span>؟
+              <br/><br/>
+              <span className="text-red-500 text-xs">سيتم إزالة الصورة وإلغاء الحجز من السجلات المكتملة.</span>
+            </p>
+            <div className="flex flex-col gap-3">
+              <button onClick={confirmDelete} disabled={isProcessing} className="w-full bg-red-600 text-white py-3 rounded-xl font-black shadow-lg active:scale-95 transition-all">
+                {isProcessing ? 'جاري الحذف...' : 'نعم، حذف وإلغاء الحجز'}
+              </button>
+              <button onClick={() => setRecordToDelete(null)} disabled={isProcessing} className="w-full bg-slate-100 text-slate-500 py-3 rounded-xl font-black hover:bg-slate-200 transition-all">
+                تراجع
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden min-h-[600px] flex flex-col">
         <div className="absolute top-0 right-0 p-4">
           <button 
@@ -236,187 +317,183 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
             className="p-3 bg-white text-slate-600 rounded-full shadow-lg border border-slate-100 hover:bg-slate-50 transition-all flex items-center gap-2"
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m15 18-6-6 6-6"/></svg>
-            {selectedDateFolder && <span className="text-xs font-black hidden md:inline">رجوع للأرشيف</span>}
+            <span className="text-xs font-black">{selectedDateFolder ? 'الرجوع للمجلدات' : 'الرئيسية'}</span>
           </button>
         </div>
 
-        <div className="pt-8 flex-1 flex flex-col">
-          <div className="flex flex-col gap-4 mb-6">
-             <h2 className="text-3xl font-black text-slate-900 flex items-center gap-3">
-               <span className="text-emerald-600">🗂️</span>
-               {selectedDateFolder ? (
-                 <div className="flex items-center gap-2">
-                    <span>وصولات يوم:</span>
-                    <span className="text-emerald-600 underline decoration-wavy decoration-emerald-300">{getDayName(selectedDateFolder)}</span>
-                    <span className="text-lg text-slate-400 font-bold">({selectedDateFolder})</span>
-                 </div>
-               ) : 'أرشيف الوصولات اليومي'}
-             </h2>
-             {!selectedDateFolder && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-start gap-3">
-                    <svg className="w-6 h-6 text-emerald-600 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                    <div>
-                        <p className="font-black text-emerald-800 text-sm">نظام الأرشفة التلقائي:</p>
-                        <p className="text-xs font-bold text-emerald-700 mt-1">يتم حفظ الوصولات وتجميعها في مجلدات حسب تاريخ الرفع. اضغط على اليوم لعرض الوصولات.</p>
-                    </div>
-                </div>
-             )}
+        <div className="pt-8 flex-1">
+          <div className="flex flex-col md:flex-row items-center justify-between mb-8">
+             <div>
+                <h2 className="text-3xl font-black text-slate-900 mb-2">أرشيف الوصولات</h2>
+                <p className="text-slate-500 font-bold text-sm">
+                   {selectedDateFolder ? `مجلد: ${selectedDateFolder} (${getDayName(selectedDateFolder)})` : 'المجلدات حسب التاريخ'}
+                </p>
+             </div>
           </div>
 
-          {/* FOLDER VIEW (List of Dates as Days) */}
-          {!selectedDateFolder && (
-             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 animate-scale-up">
-                {isLoadingTrash && <div className="col-span-full py-4 text-center text-slate-400 font-bold animate-pulse">جاري تحديث الأرشيف...</div>}
-                
-                {sortedDates.length === 0 && !isLoadingTrash ? (
-                    <div className="col-span-full py-20 text-center text-slate-300 font-black text-xl italic">لا توجد وصولات محفوظة.</div>
-                ) : (
-                    sortedDates.map(date => {
-                        const dayName = getDayName(date);
-                        return (
-                            <button 
-                                key={date} 
-                                onClick={() => setSelectedDateFolder(date)}
-                                className="bg-slate-50 hover:bg-emerald-50 border-2 border-slate-200 hover:border-emerald-300 rounded-[2rem] p-6 flex flex-col items-center justify-center gap-3 transition-all group shadow-sm hover:shadow-md active:scale-95"
-                            >
-                                <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform border border-slate-100">
-                                    <span className="text-3xl">📅</span>
-                                </div>
-                                <div className="text-center w-full">
-                                    <span className="block font-black text-emerald-700 text-lg mb-1">{dayName}</span>
-                                    <span className="block font-bold text-slate-500 text-xs dir-ltr bg-slate-200/50 rounded-lg py-1 px-2">{date}</span>
-                                    <span className="block text-[10px] font-black text-slate-400 mt-2 border-t border-slate-200 pt-1 w-full">{groupedByDate[date].length} وصل</span>
-                                </div>
-                            </button>
-                        );
-                    })
+          {!selectedDateFolder ? (
+             // Date Folders View
+             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {sortedDates.map(date => {
+                    const count = groupedByDate[date].length;
+                    return (
+                        <div key={date} onClick={() => setSelectedDateFolder(date)} className="group bg-slate-50 border-2 border-slate-200 p-6 rounded-3xl cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all text-center">
+                            <div className="w-16 h-16 bg-blue-200 text-blue-700 rounded-2xl mx-auto mb-3 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                            </div>
+                            <h4 className="font-black text-slate-800 text-sm">{date}</h4>
+                            <p className="text-[10px] text-slate-500 font-bold mt-1">{getDayName(date)}</p>
+                            <span className="inline-block mt-2 bg-white px-3 py-1 rounded-full text-[10px] font-black text-blue-600 shadow-sm border border-blue-100">{count} وصل</span>
+                        </div>
+                    )
+                })}
+                {sortedDates.length === 0 && (
+                    <div className="col-span-full py-20 text-center text-slate-400 font-black italic text-lg">لا توجد وصولات محفوظة حتى الآن.</div>
                 )}
              </div>
-          )}
-
-          {/* DETAIL VIEW (Grid of Images for Selected Date) */}
-          {selectedDateFolder && (
-             <div className="flex-1 flex flex-col animate-scale-up">
-                {/* Unified Toolbar - Matches ReviewerTable/OfficeTable Style */}
-                <div className="bg-white p-3 rounded-2xl border-2 border-slate-900 shadow-sm mb-4">
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 items-center">
-                        <div className="md:col-span-2">
+          ) : (
+             // Receipts Inside Folder View
+             <div className="flex flex-col h-full animate-scale-up">
+                
+                {/* Updated Toolbar Matching ReviewerTable Style */}
+                <div className="bg-white p-3 rounded-2xl border-2 border-slate-900 shadow-sm mb-6 sticky top-0 z-20">
+                   {/* Top Row: Actions & Selection Info */}
+                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 border-b border-slate-100 pb-4">
+                      <div className="flex items-center gap-4">
+                         <div className="flex items-center gap-2">
                             <input 
-                            type="text" 
-                            placeholder="بحث عن اسم المراجع..." 
-                            value={searchQuery} 
-                            onChange={e => setSearchQuery(e.target.value)} 
-                            className="w-full h-9 px-4 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-black outline-none" 
+                              type="checkbox" 
+                              checked={selectedIds.size > 0 && selectedIds.size === currentFolderRecords.length}
+                              onChange={toggleSelectAll}
+                              className="w-5 h-5 accent-blue-600 cursor-pointer"
                             />
-                        </div>
-                        <select 
+                            <span className="text-xs font-black text-slate-600 select-none">تحديد الكل</span>
+                         </div>
+                         <div className="text-slate-900 font-black text-xs italic flex items-center gap-2">
+                            <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+                            {selectedIds.size > 0 ? `تم تحديد ${selectedIds.size} عنصر` : `عرض ${currentFolderRecords.length} وصل`}
+                         </div>
+                      </div>
+
+                      {/* Bulk Actions */}
+                      <div className="flex flex-wrap items-center gap-2 justify-start md:justify-end w-full md:w-auto">
+                         {selectedIds.size > 0 && (
+                             <>
+                                <button onClick={handleBulkDownload} disabled={isProcessing} className="h-9 bg-blue-600 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all shadow-sm flex items-center gap-1 animate-scale-up hover:bg-blue-700">
+                                   {isProcessing ? 'جاري...' : <>تحميل <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></>}
+                                </button>
+                                <button onClick={handleSend} disabled={isProcessing} className="h-9 bg-emerald-600 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all shadow-sm flex items-center gap-1 animate-scale-up hover:bg-emerald-700">
+                                   مشاركة <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                </button>
+                                {isAdmin && (
+                                  <button onClick={handleBulkDelete} disabled={isProcessing} className="h-9 bg-red-600 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all shadow-sm flex items-center gap-1 animate-scale-up hover:bg-red-700">
+                                      حذف <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                  </button>
+                                )}
+                                <button onClick={() => setSelectedIds(new Set())} className="h-9 bg-slate-200 text-slate-600 px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all">إلغاء التحديد</button>
+                             </>
+                         )}
+                      </div>
+                   </div>
+
+                   {/* Row 2: Filters Grid */}
+                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 items-center">
+                      <input 
+                        type="text" 
+                        value={searchQuery} 
+                        onChange={e => setSearchQuery(e.target.value)} 
+                        placeholder="بحث بالاسم..." 
+                        className="w-full h-9 px-4 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-black outline-none focus:border-blue-400 transition-all md:col-span-2" 
+                      />
+                      <select 
                         value={activeCircle} 
-                        onChange={e => setActiveCircle(e.target.value)}
-                        className="h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none cursor-pointer"
-                        >
-                        <option value="ALL">جميع الدوائر</option>
-                        {Object.values(CIRCLE_NAMES).map((name, idx) => (
-                            <option key={idx} value={Object.keys(CIRCLE_NAMES)[idx]}>{name}</option>
-                        ))}
-                        </select>
-                        {isAdmin && (
-                            <select 
-                                value={selectedOffice} 
-                                onChange={e => setSelectedOffice(e.target.value)}
-                                className="h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none cursor-pointer"
-                            >
-                                <option value="ALL">جميع المكاتب</option>
-                                {allOfficeUsers.map(u => (
-                                    <option key={u.id} value={u.office_name}>{u.office_name}</option>
-                                ))}
-                            </select>
-                        )}
-                        
-                        <div className="flex items-center gap-2 md:col-span-2 justify-end">
-                            <div className="flex items-center gap-2 bg-slate-50 px-3 py-1 rounded-lg border border-slate-100">
-                                <input 
-                                    type="checkbox" 
-                                    checked={selectedIds.size === currentFolderRecords.length && currentFolderRecords.length > 0} 
-                                    onChange={toggleSelectAll}
-                                    className="w-4 h-4 accent-emerald-600 cursor-pointer"
-                                />
-                                <span className="text-[10px] font-black text-slate-600">تحديد الكل</span>
-                            </div>
-                            
-                            {isSelectionMode && (
-                                <>
-                                    <button 
-                                    onClick={handleBulkDownload} 
-                                    disabled={isProcessing}
-                                    className="h-9 bg-slate-900 text-white px-3 rounded-lg font-black text-[10px] shadow-sm active:scale-95 transition-all flex items-center gap-1 disabled:opacity-70"
-                                    >
-                                        {isProcessing ? '...' : `تنزيل (${selectedIds.size})`}
-                                    </button>
-                                    <button 
-                                    onClick={handleSend} 
-                                    disabled={isProcessing}
-                                    className="h-9 bg-blue-600 text-white px-3 rounded-lg font-black text-[10px] shadow-sm active:scale-95 transition-all flex items-center gap-1 disabled:opacity-70"
-                                    >
-                                        {isProcessing ? '...' : 'إرسال'}
-                                    </button>
-                                </>
-                            )}
-                        </div>
-                    </div>
+                        onChange={e => setActiveCircle(e.target.value)} 
+                        className="h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none cursor-pointer focus:border-blue-400"
+                      >
+                         <option value="ALL">كل الدوائر</option>
+                         {Object.values(CircleType).map(t => <option key={t} value={t}>{CIRCLE_NAMES[t]}</option>)}
+                      </select>
+                      {isAdmin && (
+                          <select 
+                            value={selectedOffice} 
+                            onChange={e => setSelectedOffice(e.target.value)} 
+                            className="h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none cursor-pointer focus:border-blue-400"
+                          >
+                             <option value="ALL">كل المكاتب</option>
+                             {allOfficeUsers.map(o => <option key={o.id} value={o.office_name}>{o.office_name}</option>)}
+                          </select>
+                      )}
+                      <button 
+                        onClick={resetFilters} 
+                        className="h-9 bg-slate-200 text-slate-600 rounded-lg text-[10px] font-black hover:bg-slate-300 transition-all"
+                      >
+                        إعادة تعيين
+                      </button>
+                   </div>
                 </div>
 
                 {/* Grid */}
-                {currentFolderRecords.length === 0 ? (
-                    <div className="py-20 text-center text-slate-300 font-black text-lg">لا توجد وصولات مطابقة للبحث في هذا اليوم.</div>
-                ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 overflow-y-auto custom-scrollbar pr-2 pb-2">
-                        {currentFolderRecords.map(record => (
-                            <div 
-                                key={record.id} 
-                                onClick={() => toggleSelection(record.id)}
-                                className={`bg-white border-2 rounded-[2rem] overflow-hidden shadow-sm transition-all group flex flex-col relative cursor-pointer ${selectedIds.has(record.id) ? 'border-emerald-500 ring-2 ring-emerald-200' : 'border-slate-100 hover:border-emerald-300'}`}
-                            >
-                                <div className="absolute top-3 right-3 z-10">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={selectedIds.has(record.id)} 
-                                        onChange={() => {}} 
-                                        className="w-5 h-5 accent-emerald-600 shadow-md cursor-pointer"
-                                    />
-                                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 pb-20">
+                   {currentFolderRecords.map(record => (
+                       <div 
+                         key={record.id} 
+                         className={`relative bg-white border-2 rounded-2xl overflow-hidden shadow-sm transition-all group ${selectedIds.has(record.id) ? 'border-blue-500 ring-2 ring-blue-200' : 'border-slate-100 hover:border-slate-300'}`}
+                         onClick={() => toggleSelection(record.id)}
+                       >
+                          {/* Selection Checkbox Overlay */}
+                          <div className="absolute top-2 right-2 z-10">
+                             <input type="checkbox" checked={selectedIds.has(record.id)} readOnly className="w-5 h-5 accent-blue-600 shadow-sm cursor-pointer" />
+                          </div>
 
-                                <div className="relative aspect-[3/4] bg-slate-100 overflow-hidden">
-                                    <img src={record.bookingImage} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Booking" />
-                                    <div className="absolute bottom-0 left-0 w-full p-2 bg-gradient-to-t from-black/80 to-transparent">
-                                        <p className="text-white text-[10px] font-bold text-center">{CIRCLE_NAMES[record.circleType]}</p>
-                                    </div>
-                                </div>
-                                
-                                <div className="p-4 flex flex-col gap-2 flex-1">
-                                    <div>
-                                        <h3 className="font-black text-slate-900 text-xs truncate">{record.headFullName}</h3>
-                                        {record.affiliation && <p className="text-[9px] text-indigo-600 font-bold truncate">{record.affiliation}</p>}
-                                        <p className="text-[10px] font-bold text-slate-400 mt-1">
-                                            تاريخ الحجز: <span className="text-emerald-700" dir="ltr">{record.bookingDate || '-'}</span>
-                                        </p>
-                                    </div>
-                                    
-                                    <div className="mt-auto pt-2 flex gap-2">
-                                        <button 
+                          {/* Image */}
+                          <div className="aspect-[3/4] bg-slate-100 relative">
+                             {record.bookingImage ? (
+                                <img src={record.bookingImage} className="w-full h-full object-cover" loading="lazy" />
+                             ) : (
+                                <div className="w-full h-full flex items-center justify-center text-slate-300 font-black text-xs">لا توجد صورة</div>
+                             )}
+                             {/* Overlay Info */}
+                             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-8 text-white">
+                                <p className="font-black text-[10px] truncate">{record.headFullName}</p>
+                                <p className="text-[9px] font-bold opacity-80">{CIRCLE_NAMES[record.circleType]}</p>
+                             </div>
+                          </div>
+
+                          {/* Footer Info */}
+                          <div className="p-2 bg-slate-50 flex justify-between items-center border-t border-slate-100">
+                             <div>
+                                <p className="text-[8px] font-black text-slate-500">{record.affiliation}</p>
+                                <p className="text-[8px] font-bold text-slate-400" dir="ltr">{new Date(record.bookingCreatedAt || record.createdAt).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'})}</p>
+                             </div>
+                             <div className="flex gap-1">
+                                {record.bookingImage && (
+                                    <button 
                                         onClick={(e) => { e.stopPropagation(); downloadImage(record.bookingImage!, record.headFullName); }}
-                                        className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-lg font-black text-[10px] active:scale-95 transition-all hover:bg-slate-200"
-                                        >
-                                        تنزيل
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
+                                        className="w-7 h-7 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:bg-blue-600 hover:text-white transition-colors shadow-sm"
+                                        title="تحميل"
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                                    </button>
+                                )}
+                                {isAdmin && (
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); handleSingleDeleteRequest(record); }}
+                                        className="w-7 h-7 bg-white border border-red-100 text-red-500 rounded-lg flex items-center justify-center hover:bg-red-600 hover:text-white transition-colors shadow-sm"
+                                        title="حذف"
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                    </button>
+                                )}
+                             </div>
+                          </div>
+                       </div>
+                   ))}
+                   {currentFolderRecords.length === 0 && (
+                       <div className="col-span-full py-10 text-center text-slate-300 font-black italic">لا توجد وصولات مطابقة للبحث.</div>
+                   )}
+                </div>
              </div>
           )}
-
         </div>
       </div>
     </div>

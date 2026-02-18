@@ -8,6 +8,7 @@ import LastUploadsModal from './LastUploadsModal'; // Import new component
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { supabase } from '../lib/supabase';
+import { GoogleGenAI } from '@google/genai';
 
 interface ReviewerTableProps {
   reviewers: Reviewer[];
@@ -16,7 +17,7 @@ interface ReviewerTableProps {
   onUpdate: (reviewer: Reviewer) => void;
   onUpdateDirect?: (id: string, imageData: string) => Promise<void>;
   onToggleBooking?: (id: string, currentState: boolean, currentSourceId: string | null) => void;
-  onUploadAndBook?: (id: string, imageData: string, type: 'reviewer' | 'office') => Promise<void>;
+  onUploadAndBook?: (id: string, imageData: string, type: 'reviewer' | 'office', bookingDate?: string) => Promise<void>;
   onToggleUploadStatus?: (id: string, currentState: boolean, currentSourceId: string | null) => void;
   onDeleteMember: (reviewerId: string, memberId: string) => void;
   onResetAll?: () => Promise<void>;
@@ -483,11 +484,35 @@ export default function ReviewerTable({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && activeReviewerId) {
+      showToast('جاري تحليل الصورة وسحب التاريخ...', 'success');
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64 = reader.result as string;
+        let extractedDate = new Date().toLocaleDateString('en-CA');
+
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const model = 'gemini-3-flash-preview';
+            const prompt = "Extract the appointment date (booking_date) from this image. Format: YYYY-MM-DD. Return JSON: { booking_date: string }";
+            const response = await ai.models.generateContent({
+                model,
+                config: { responseMimeType: "application/json" },
+                contents: {
+                    parts: [
+                        { inlineData: { mimeType: file.type, data: base64.split(',')[1] } },
+                        { text: prompt }
+                    ]
+                }
+            });
+            const text = response.text?.replace(/```json/g, '').replace(/```/g, '').trim() || '{}';
+            const json = JSON.parse(text);
+            if (json.booking_date) extractedDate = json.booking_date;
+        } catch (error) {
+            console.error("Date extraction failed", error);
+        }
+
         if (onUploadAndBook) {
-          await onUploadAndBook(activeReviewerId, base64, 'reviewer');
+          await onUploadAndBook(activeReviewerId, base64, 'reviewer', extractedDate);
         }
       };
       reader.readAsDataURL(file);
@@ -589,8 +614,8 @@ export default function ReviewerTable({
       )}
 
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl animate-scale-up">
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up">
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl relative overflow-hidden">
             <h3 className="text-2xl font-black mb-3 text-red-600">تأكيد الحذف</h3>
             <p className="text-slate-500 mb-8 font-bold text-sm leading-relaxed">
               هل أنت متأكد من حذف <span className="text-red-600 font-black">"{deleteConfirm.name}"</span>؟ لا يمكن التراجع عن هذا الإجراء.
@@ -605,8 +630,8 @@ export default function ReviewerTable({
 
       {/* Bulk Action Modals */}
       {showBulkModal && bulkActionType && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl animate-scale-up">
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up">
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl relative overflow-hidden">
             <h3 className="text-2xl font-black mb-3 text-slate-800">
               {bulkActionType === 'UPLOAD' ? 'تأكيد الرفع الجماعي' : 'تأكيد إلغاء الرفع'}
             </h3>
@@ -629,8 +654,8 @@ export default function ReviewerTable({
       )}
 
       {showBulkDeleteModal && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl animate-scale-up">
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up">
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl relative overflow-hidden">
             <h3 className="text-2xl font-black mb-3 text-red-600">حذف المحدد</h3>
             <p className="text-slate-500 mb-4 font-bold text-sm leading-relaxed">
               سيتم حذف <span className="text-lg text-red-600 font-black">{selectedIds.size}</span> سجلات بشكل نهائي.

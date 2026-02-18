@@ -197,12 +197,12 @@ export default function BookingSourcesManager({ showToast, loggedInUser, fetchAl
     <div className="max-w-7xl mx-auto space-y-8 animate-scale-up pb-40">
       {deleteSourceConfirm && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-white p-6 rounded-[2rem] w-full max-sm text-center border-2 border-slate-900 shadow-2xl animate-scale-up">
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl animate-scale-up">
             <h3 className="text-xl font-black mb-2 text-red-600">تأكيد الحذف</h3>
             <p className="text-slate-500 mb-6 font-bold text-sm">حذف المصدر "{deleteSourceConfirm.sourceName}"؟ سيتم إلغاء ارتباط كافة السجلات به مالياً.</p>
             <div className="flex gap-2">
-              <button onClick={handleDeleteSource} disabled={loading} className="flex-1 bg-red-600 text-white py-3 rounded-xl font-black">نعم، حذف</button>
-              <button onClick={() => setDeleteSourceConfirm(null)} className="flex-1 bg-slate-100 py-3 rounded-xl font-black">إلغاء</button>
+              <button onClick={handleDeleteSource} disabled={loading} className="flex-1 bg-red-600 text-white py-4 rounded-xl font-black shadow-xl active:scale-95 transition-all">نعم، حذف</button>
+              <button onClick={() => setDeleteSourceConfirm(null)} className="flex-1 bg-slate-100 text-slate-500 py-4 rounded-xl font-black hover:bg-slate-200 transition-all">إلغاء</button>
             </div>
           </div>
         </div>
@@ -210,22 +210,22 @@ export default function BookingSourcesManager({ showToast, loggedInUser, fetchAl
 
       {editingSource && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-xl max-h-[90vh] overflow-y-auto border-2 border-slate-900 shadow-2xl animate-scale-up">
-            <h3 className="text-2xl font-black mb-6 text-center">تعديل بيانات المصدر</h3>
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-xl max-h-[90vh] overflow-y-auto custom-scrollbar border-2 border-slate-900 shadow-2xl animate-scale-up">
+            <h3 className="text-2xl font-black mb-6 text-center text-slate-900">تعديل بيانات المصدر</h3>
             <form onSubmit={handleUpdateSource} className="space-y-4">
-              <input type="text" value={editSourceName} onChange={e => setEditSourceName(e.target.value)} placeholder="اسم المصدر" className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black text-center" />
-              <input type="text" value={editSourcePhone} onChange={e => setEditSourcePhone(e.target.value)} placeholder="الهاتف" className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black text-center" />
+              <input type="text" value={editSourceName} onChange={e => setEditSourceName(e.target.value)} placeholder="اسم المصدر" className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-center outline-none focus:border-blue-500" />
+              <input type="text" value={editSourcePhone} onChange={e => setEditSourcePhone(e.target.value)} placeholder="الهاتف" className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-center outline-none focus:border-blue-500" />
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                 <div className="space-y-1"><label className="text-[10px] font-black mr-2">الأيمن</label><input type="number" value={editPriceRightMosul} onChange={e => handlePriceInput(e.target.value, setEditPriceRightMosul)} className="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-center" /></div>
-                 <div className="space-y-1"><label className="text-[10px] font-black mr-2">الأيسر</label><input type="number" value={editPriceLeftMosul} onChange={e => handlePriceInput(e.target.value, setEditPriceLeftMosul)} className="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-center" /></div>
-                 <div className="space-y-1"><label className="text-[10px] font-black mr-2">حمام العليل</label><input type="number" value={editPriceHammamAlAlil} onChange={e => handlePriceInput(e.target.value, setEditPriceHammamAlAlil)} className="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-center" /></div>
-                 <div className="space-y-1"><label className="text-[10px] font-black mr-2">الشورة</label><input type="number" value={editPriceAlShoura} onChange={e => handlePriceInput(e.target.value, setEditPriceAlShoura)} className="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-center" /></div>
-                 <div className="space-y-1"><label className="text-[10px] font-black mr-2">البعاج</label><input type="number" value={editPriceBaaj} onChange={e => handlePriceInput(e.target.value, setEditPriceBaaj)} className="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-center" /></div>
-                 <div className="space-y-1"><label className="text-[10px] font-black mr-2">أخرى</label><input type="number" value={editPriceOthers} onChange={e => handlePriceInput(e.target.value, setEditPriceOthers)} className="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-center" /></div>
+                 <div className="space-y-1"><label className="text-[10px] font-black mr-2">الأيمن</label><input type="number" value={editPriceRightMosul} onChange={e => handlePriceInput(e.target.value, setEditPriceRightMosul)} className="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-center outline-none focus:border-blue-500" /></div>
+                 <div className="space-y-1"><label className="text-[10px] font-black mr-2">الأيسر</label><input type="number" value={editPriceLeftMosul} onChange={e => handlePriceInput(e.target.value, setEditPriceLeftMosul)} className="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-center outline-none focus:border-blue-500" /></div>
+                 <div className="space-y-1"><label className="text-[10px] font-black mr-2">حمام العليل</label><input type="number" value={editPriceHammamAlAlil} onChange={e => handlePriceInput(e.target.value, setEditPriceHammamAlAlil)} className="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-center outline-none focus:border-blue-500" /></div>
+                 <div className="space-y-1"><label className="text-[10px] font-black mr-2">الشورة</label><input type="number" value={editPriceAlShoura} onChange={e => handlePriceInput(e.target.value, setEditPriceAlShoura)} className="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-center outline-none focus:border-blue-500" /></div>
+                 <div className="space-y-1"><label className="text-[10px] font-black mr-2">البعاج</label><input type="number" value={editPriceBaaj} onChange={e => handlePriceInput(e.target.value, setEditPriceBaaj)} className="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-center outline-none focus:border-blue-500" /></div>
+                 <div className="space-y-1"><label className="text-[10px] font-black mr-2">أخرى</label><input type="number" value={editPriceOthers} onChange={e => handlePriceInput(e.target.value, setEditPriceOthers)} className="w-full p-3 bg-white border-2 border-slate-200 rounded-xl font-black text-center outline-none focus:border-blue-500" /></div>
               </div>
               <div className="flex gap-2 pt-6">
-                <button type="submit" disabled={loading} className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-black">حفظ التغييرات</button>
-                <button type="button" onClick={() => setEditingSource(null)} className="flex-1 bg-slate-100 py-4 rounded-2xl font-black">إلغاء</button>
+                <button type="submit" disabled={loading} className="flex-1 bg-blue-600 text-white py-4 rounded-xl font-black shadow-lg active:scale-95 transition-all">حفظ التغييرات</button>
+                <button type="button" onClick={() => setEditingSource(null)} className="flex-1 bg-slate-100 py-4 rounded-xl font-black hover:bg-slate-200 transition-all">إلغاء</button>
               </div>
             </form>
           </div>

@@ -8,6 +8,7 @@ import LastUploadsModal from './LastUploadsModal'; // Import
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { supabase } from '../lib/supabase';
+import { GoogleGenAI } from '@google/genai';
 
 interface OfficeTableProps {
   records: OfficeRecord[];
@@ -16,7 +17,7 @@ interface OfficeTableProps {
   onUpdate: (record: OfficeRecord) => void;
   onUpdateDirect?: (id: string, imageData: string) => Promise<void>;
   onToggleBooking?: (id: string, currentState: boolean, currentSourceId: string | null) => void;
-  onUploadAndBook?: (id: string, imageData: string, type: 'reviewer' | 'office') => Promise<void>;
+  onUploadAndBook?: (id: string, imageData: string, type: 'reviewer' | 'office', bookingDate?: string) => Promise<void>;
   onToggleUploadStatus?: (id: string, currentState: boolean, currentSourceId: string | null) => void;
   onResetAllOffices?: () => Promise<void>;
   onDeleteMember: (recordId: string, memberId: string) => void;
@@ -501,9 +502,15 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
       }
 
       items.push(
-        { label: 'تعديل بيانات المراجع', onClick: () => onUpdate(r), disabled: isLocked, tooltip: isLocked ? permissionDeniedMessage : undefined },
-        { label: 'رفع صورة الحجز (تحليل ذكي ⚡)', onClick: () => { setActiveRecordId(r.id); fileInputRef.current?.click(); }, disabled: isLocked, tooltip: isLocked ? permissionDeniedMessage : undefined },
+        { label: 'تعديل بيانات المراجع', onClick: () => onUpdate(r), disabled: isLocked, tooltip: isLocked ? permissionDeniedMessage : undefined }
       );
+
+      // RESTRICTED UPLOAD FEATURE TO ADMIN ONLY
+      if (isAdmin) {
+        items.push(
+          { label: 'رفع صورة الحجز (تحليل ذكي ⚡)', onClick: () => { setActiveRecordId(r.id); fileInputRef.current?.click(); }, disabled: isLocked, tooltip: isLocked ? permissionDeniedMessage : undefined }
+        );
+      }
 
       items.push(
         { isSeparator: true },
@@ -536,11 +543,35 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && activeRecordId) {
+      showToast('جاري تحليل الصورة وسحب التاريخ...', 'success');
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64 = reader.result as string;
+        let extractedDate = new Date().toLocaleDateString('en-CA');
+
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const model = 'gemini-3-flash-preview';
+            const prompt = "Extract the appointment date (booking_date) from this image. Format: YYYY-MM-DD. Return JSON: { booking_date: string }";
+            const response = await ai.models.generateContent({
+                model,
+                config: { responseMimeType: "application/json" },
+                contents: {
+                    parts: [
+                        { inlineData: { mimeType: file.type, data: base64.split(',')[1] } },
+                        { text: prompt }
+                    ]
+                }
+            });
+            const text = response.text?.replace(/```json/g, '').replace(/```/g, '').trim() || '{}';
+            const json = JSON.parse(text);
+            if (json.booking_date) extractedDate = json.booking_date;
+        } catch (error) {
+            console.error("Date extraction failed", error);
+        }
+
         if (onUploadAndBook) {
-          await onUploadAndBook(activeRecordId, base64, 'office');
+          await onUploadAndBook(activeRecordId, base64, 'office', extractedDate);
         }
       };
       reader.readAsDataURL(file);
@@ -637,8 +668,8 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
       )}
 
       {deleteConfirm && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl animate-scale-up">
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up">
+          <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl relative overflow-hidden">
             <h3 className="text-2xl font-black mb-3 text-red-600">تأكيد الحذف</h3>
             <p className="text-slate-500 mb-8 font-bold text-sm leading-relaxed">
               هل أنت متأكد من حذف <span className="text-red-600 font-black">"{deleteConfirm.name}"</span>؟ لا يمكن التراجع عن هذا الإجراء.
@@ -652,7 +683,7 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
       )}
 
       {showBulkModal && bulkActionType && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up">
           <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl animate-scale-up">
             <h3 className="text-2xl font-black mb-3 text-slate-800">
               {bulkActionType === 'UPLOAD' ? 'تأكيد الرفع الجماعي' : 'تأكيد إلغاء الرفع'}
@@ -676,7 +707,7 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
       )}
 
       {showBulkDeleteModal && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-scale-up">
           <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl animate-scale-up">
             <h3 className="text-2xl font-black mb-3 text-red-600">حذف المحدد</h3>
             <p className="text-slate-500 mb-4 font-bold text-sm leading-relaxed">
@@ -777,10 +808,13 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
             {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n} أفراد</option>)}
           </select>
           
-          <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} className="h-9 px-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none cursor-pointer">
-            <option value="ALL">فلتر جهة الرفع</option>
-            {bookingSources.map(s => <option key={s.id} value={s.id}>{s.sourceName}</option>)}
-          </select>
+          {/* Conditional Rendering for Source Filter */}
+          {isAdmin && (
+            <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} className="h-9 px-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none cursor-pointer">
+              <option value="ALL">فلتر جهة الرفع</option>
+              {bookingSources.map(s => <option key={s.id} value={s.id}>{s.sourceName}</option>)}
+            </select>
+          )}
 
           <select value={uploadFilter} onChange={e => setUploadFilter(e.target.value as UploadStatusFilter)} className="h-9 px-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none"><option value="ALL">الكل (رفع)</option><option value="UPLOADED">مرفوع</option><option value="NOT_UPLOADED">غير مرفوع</option></select>
           <select value={bookingStatusFilter} onChange={e => setBookingStatusFilter(e.target.value as BookingStatusFilter)} className="h-9 px-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none"><option value="ALL">الكل (حجز)</option><option value="BOOKED">محجوز</option><option value="NOT_BOOKED">غير محجوز</option></select>
@@ -870,7 +904,7 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
                           </div>
                         ) : idx + 1}
                     </td>
-                    <td className={`font-black text-[9px] ${isSelected ? 'text-black' : 'text-slate-600'}`}>{CIRCLE_NAMES[r.circleType] || '—'}</td>
+                    <td className={`font-black text-[9px] ${isSelected ? 'text-black' : 'text-slate-600'}`}>{CIRCLE_NAMES[r.circleType]}</td>
                     <td className={`text-right font-black px-2 text-[11px] truncate max-w-[130px] ${isDuplicate && !isSelected ? 'text-red-700 underline decoration-wavy decoration-red-600' : 'text-slate-950'} ${textClass}`}>{r.headFullName}</td>
                     <td className={`font-black text-[10px] text-slate-950 ${textClass}`}>{r.headSurname || '—'}</td>
                     <td className={`text-right font-black px-2 text-[10px] truncate max-w-[100px] text-slate-950 ${textClass}`}>{r.headMotherName}</td>
