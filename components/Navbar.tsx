@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { LoggedInUser, OfficeUser } from '../types';
+import { requestForToken } from '../lib/firebase';
 
 interface NavbarProps {
   onToggleSidebar: () => void;
@@ -13,14 +14,32 @@ interface NavbarProps {
 
 const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onRefresh, isSyncing, loggedInUser, onLogout, allOfficeUsers }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [notificationStatus, setNotificationStatus] = useState<'default' | 'granted' | 'denied'>('default');
 
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000); 
+    
+    if ('Notification' in window) {
+        setNotificationStatus(Notification.permission);
+    }
 
     return () => clearInterval(timer); 
   }, []);
+
+  const handleEnableNotifications = async () => {
+    const token = await requestForToken();
+    if (token) {
+        setNotificationStatus('granted');
+        alert("تم تفعيل الإشعارات بنجاح!\n\nToken:\n" + token.substring(0, 20) + "...");
+        console.log("Full Token:", token);
+        // هنا يمكنك إرسال التوكن إلى قاعدة البيانات إذا أردت
+    } else {
+        alert("فشل تفعيل الإشعارات أو تم رفض الإذن.");
+        setNotificationStatus('denied');
+    }
+  };
 
   const formattedTime = currentTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   const formattedDate = currentTime.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -56,6 +75,18 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onRefresh, isSyncing, 
           <span className="text-[8px] md:text-[10px] font-bold text-slate-500 whitespace-nowrap">{formattedDate}</span> 
           <span className="text-xs md:text-sm font-black text-blue-800 leading-none" dir="ltr">{formattedTime}</span>
         </div>
+
+        {/* زر تفعيل الإشعارات للمدير فقط */}
+        {loggedInUser?.role === 'ADMIN' && notificationStatus !== 'granted' && (
+           <button 
+             onClick={handleEnableNotifications}
+             className="w-9 h-9 md:w-auto md:h-auto md:px-3 md:py-2 rounded-xl border-2 border-yellow-200 bg-yellow-50 text-yellow-700 hover:bg-yellow-100 transition-all flex items-center justify-center gap-2 animate-pulse"
+             title="تفعيل الإشعارات"
+           >
+             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+             <span className="hidden md:block text-[10px] font-black">تفعيل التنبيهات</span>
+           </button>
+        )}
 
         {/* Active Users Indicator for Admin */}
         {loggedInUser?.role === 'ADMIN' && activeUsersCount > 0 && (

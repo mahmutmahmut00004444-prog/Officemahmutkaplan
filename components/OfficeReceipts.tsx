@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { OfficeRecord, CIRCLE_NAMES, OfficeUser, LoggedInUser, RecycleBinItem, CircleType } from '../types';
 import { supabase } from '../lib/supabase';
@@ -220,17 +219,20 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
       } catch (err: any) {
         // Handle AbortError (User cancelled share sheet) gracefully
         const errorName = err?.name;
-        const errorMessage = err?.message;
+        // Ensure errorMessage is captured, falling back to stringifying err if message doesn't exist
+        const errorMessage = err?.message || String(err);
         
-        if (
+        const isCancelled = 
             errorName === 'AbortError' || 
-            (typeof errorMessage === 'string' && (errorMessage.includes('canceled') || errorMessage.includes('cancelled')))
-        ) {
+            (typeof errorMessage === 'string' && (errorMessage.toLowerCase().includes('canceled') || errorMessage.toLowerCase().includes('cancelled')));
+
+        if (isCancelled) {
             console.log('User cancelled sharing');
             // Do not show an alert for cancellation
         } else {
             console.error("Error sharing files:", err);
-            alert(`حدث خطأ أثناء محاولة المشاركة: ${String(errorMessage) || 'Unknown error'}`);
+            // Explicitly cast to string to avoid type errors
+            alert(`حدث خطأ أثناء محاولة المشاركة: ${String(errorMessage)}`);
         }
       } finally {
         setIsProcessing(false);

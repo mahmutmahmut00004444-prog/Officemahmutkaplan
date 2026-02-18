@@ -31,6 +31,7 @@ import OfficeReceipts from './components/OfficeReceipts';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { formatCurrency } from './lib/formatCurrency';
 import { GoogleGenAI } from '@google/genai';
+import { onMessageListener } from './lib/firebase'; // Import Listener
 
 const ADMIN_USERNAME = "محمود قبلان";
 const DEFAULT_ADMIN_PASSWORD = "20040104222026"; 
@@ -85,6 +86,18 @@ const App: React.FC = () => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 5000); 
   };
+
+  // Firebase Message Listener
+  useEffect(() => {
+    if (isAdmin) {
+      onMessageListener()
+        .then((payload: any) => {
+          console.log('Foreground Message:', payload);
+          showToast(`🔔 ${payload.notification?.title}: ${payload.notification?.body}`, 'success');
+        })
+        .catch((err) => console.log('failed: ', err));
+    }
+  }, [isAdmin]);
 
   // Helper to get simple device name
   const getDeviceInfo = () => {

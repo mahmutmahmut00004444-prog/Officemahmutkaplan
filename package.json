@@ -1,3 +1,4 @@
+
 {
   "name": "national-id-system",
   "private": true,
@@ -15,7 +16,8 @@
     "jspdf": "^2.5.1",
     "lucide-react": "^0.454.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "firebase": "^10.7.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
