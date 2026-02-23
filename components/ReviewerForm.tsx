@@ -16,6 +16,17 @@ interface FamilyMemberInput extends Omit<FamilyMember, 'fullName'> {
   fatherGrandfatherName: string;
 }
 
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 const ReviewerForm: React.FC<ReviewerFormProps> = ({ onSave, onGoBack, initialData, isEditMode = false, formatCurrency, showToast }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -131,13 +142,29 @@ const ReviewerForm: React.FC<ReviewerFormProps> = ({ onSave, onGoBack, initialDa
     setIsSubmitting(true);
 
     try {
-      const finalFamily: FamilyMember[] = familyMembers.map(m => ({
-        ...m,
-        id: m.id || `MEM-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-        fullName: `${m.firstName.trim()} ${m.fatherGrandfatherName.trim()}`.trim(),
-      }));
+      const finalFamily: FamilyMember[] = familyMembers.map(m => {
+        let surname = m.surname;
+        let motherName = m.motherName;
+        
+        // Auto-fill missing fields if not provided
+        if (!surname && (m.relationship === 'ابن' || m.relationship === 'ابنة' || m.relationship === 'أخ' || m.relationship === 'أخت')) {
+          surname = formData.headSurname;
+        }
+        if (!motherName && (m.relationship === 'أخ' || m.relationship === 'أخت')) {
+          motherName = formData.headMotherName;
+        }
 
-      const recordId = initialData?.id || `REV-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+        return {
+          ...m,
+          id: m.id || generateId(),
+          fullName: `${m.firstName.trim()} ${m.fatherGrandfatherName.trim()}`.trim(),
+          surname: surname || '',
+          motherName: motherName || '',
+          relationship: m.relationship || 'فرد'
+        };
+      });
+
+      const recordId = initialData?.id || generateId();
 
       await onSave({
         id: recordId,
@@ -177,7 +204,7 @@ const ReviewerForm: React.FC<ReviewerFormProps> = ({ onSave, onGoBack, initialDa
     if (count > familyMembers.length) {
       for (let i = familyMembers.length; i < count; i++) {
         updated.push({
-          id: `MEM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, 
+          id: generateId(), 
           relationship: '', firstName: '', fatherGrandfatherName: '', surname: '', motherName: '', dob: ''
         });
       }
@@ -202,7 +229,7 @@ const ReviewerForm: React.FC<ReviewerFormProps> = ({ onSave, onGoBack, initialDa
   const optionalBadge = <span className="text-[9px] font-black text-slate-300 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 mr-2 lowercase">اختياري</span>;
 
   return (
-    <div className="relative">
+    <div className="max-w-7xl mx-auto space-y-6 pb-40 animate-scale-up">
       <div className="absolute top-0 right-0 z-10 p-2">
         <button 
           onClick={onGoBack}
@@ -212,10 +239,10 @@ const ReviewerForm: React.FC<ReviewerFormProps> = ({ onSave, onGoBack, initialDa
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         </button>
       </div>
-      <form onSubmit={handleFormSubmit} className="space-y-6 pb-10 mt-16">
+      <form onSubmit={handleFormSubmit} className="space-y-6 mt-16">
         
         {/* Field Toggles & Circle Selection */}
-        <div className="bg-white p-5 rounded-2xl shadow border-2 border-slate-900">
+        <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-2xl border-2 border-slate-900">
           <div className="flex flex-wrap gap-2 mb-6 border-b border-slate-100 pb-4">
              <button type="button" onClick={() => setShowPhone(!showPhone)} className={`px-4 py-2 rounded-lg text-[10px] font-black border-2 transition-all ${showPhone ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
                 {showPhone ? '✅ رقم الهاتف مفعل' : 'تفعيل رقم الهاتف'}
@@ -250,7 +277,7 @@ const ReviewerForm: React.FC<ReviewerFormProps> = ({ onSave, onGoBack, initialDa
           </div>
         </div>
 
-        <div className="bg-white p-6 md:p-8 rounded-[1.5rem] shadow-md border-2 border-slate-900 space-y-6">
+        <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-2xl border-2 border-slate-900 space-y-6">
           <div className="flex items-center justify-between border-b-2 border-slate-100 pb-4">
              <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-700 rounded-xl flex items-center justify-center text-white shadow-md">
@@ -292,7 +319,7 @@ const ReviewerForm: React.FC<ReviewerFormProps> = ({ onSave, onGoBack, initialDa
               <div className="space-y-1">
                 <label className={labelClasses}>عدد أفراد الأسرة</label>
                 <select disabled={isSubmitting} className={inputClasses} value={familyMembers.length} onChange={handleCountChange}>
-                  {[0,1,2,3,4,5,6,7,8,9].map(n => (
+                  {[0,1,2,3,4,5,6,7,8,9,10].map(n => (
                     <option key={n} value={n}>{n} أفراد</option>
                   ))}
                 </select>
@@ -325,7 +352,7 @@ const ReviewerForm: React.FC<ReviewerFormProps> = ({ onSave, onGoBack, initialDa
             <h3 className="text-slate-800 font-black text-sm px-2 uppercase tracking-widest">أفراد الأسرة</h3>
             <div className="grid grid-cols-1 gap-4">
               {familyMembers.map((m, i) => (
-                <div key={m.id} className="bg-white p-5 rounded-2xl border-r-8 border-blue-700 shadow-md space-y-5 border-2 border-slate-900 transition-all">
+                <div key={m.id} className="bg-white p-6 md:p-8 rounded-[2.5rem] border-r-8 border-blue-700 shadow-xl space-y-5 border-2 border-slate-900 transition-all">
                   <div className="flex items-center gap-3 border-b-2 border-slate-50 pb-2">
                       <span className="w-8 h-8 rounded-lg bg-blue-700 flex items-center justify-center text-white font-black text-xs">{i+1}</span>
                       <span className="font-black text-slate-800 text-sm">بيانات الفرد</span>

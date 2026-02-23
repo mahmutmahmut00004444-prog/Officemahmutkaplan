@@ -145,6 +145,14 @@ export interface RecycleBinItem {
   original_data: any;
 }
 
+export interface ActivityLogEntry {
+  id: string;
+  action_type: 'LOGIN' | 'ADD' | 'DELETE' | 'RESTORE' | 'LOGOUT' | 'LOGOUT_FORCE';
+  description: string;
+  user_name: string;
+  created_at: string;
+}
+
 export type ViewType = 'FORM' | 'ALL' | 'SMART_READER' | 'OFFICE_FORM' | 'OFFICE_ALL' | 'BACKUP' | 'MANAGE_OFFICES' | 'SETTINGS' | 'BOOKING_ALBUM' | 'ARCHIVE_BOOKINGS' | 'OFFICE_STATEMENT' | 'OFFICE_SETTLE' | 'COMPLETED_BOOKINGS' | 'ACCOUNTS_BLOG' | 'BOOKING_SOURCES_MANAGER' | 'ADD_BOOKING_TO_SOURCE' | 'SETTLE_SOURCE' | 'SESSIONS' | 'AI_LIST_UPLOAD' | 'TRASH' | 'USER_ACTIVITY' | 'OFFICE_RECEIPTS';
 
 export interface ProcessingLog {

@@ -162,7 +162,7 @@ export default function AccountsBlog({
   };
 
   return (
-    <div className="max-w-[95%] mx-auto space-y-6 pb-40 animate-scale-up">
+    <div className="max-w-7xl mx-auto space-y-6 pb-40 animate-scale-up">
       <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 p-4">
           <button onClick={onGoBack} className="p-3 bg-white text-slate-600 rounded-full shadow-lg border border-slate-100 hover:bg-slate-50 transition-all">

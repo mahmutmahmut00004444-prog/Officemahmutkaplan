@@ -98,8 +98,8 @@ const SettleSourcePage: React.FC<SettleSourcePageProps> = ({
 
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-scale-up pb-40">
-      <div className="bg-white p-8 rounded-[3rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden max-h-[90vh] flex flex-col"> {/* Added max-h and flex-col */}
+    <div className="max-w-7xl mx-auto space-y-8 animate-scale-up pb-40">
+      <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden max-h-[90vh] flex flex-col"> {/* Added max-h and flex-col */}
         <div className="absolute top-0 right-0 z-10 p-2">
           <button 
             onClick={onGoBack}

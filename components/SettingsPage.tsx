@@ -114,7 +114,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onResetClick, o
   });
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 animate-scale-up pb-40">
+    <div className="max-w-7xl mx-auto space-y-8 animate-scale-up pb-40">
       
       {/* Password Change Modal */}
       {showPasswordModal && (
@@ -176,7 +176,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onResetClick, o
         </div>
       )}
 
-      <div className="bg-white p-8 rounded-[3rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden">
+      <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 p-4">
           <button onClick={onGoBack} className="p-3 bg-white text-slate-600 rounded-full shadow-lg border border-slate-100 hover:bg-slate-50 transition-all">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m15 18-6-6 6-6"/></svg>

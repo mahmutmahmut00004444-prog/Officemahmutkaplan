@@ -40,6 +40,17 @@ interface CurrentContextMenuData {
   parentRecord?: OfficeRecord;
 }
 
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 const OfficeTable: React.FC<OfficeTableProps> = ({ 
   records, 
   globalNameFrequency,
@@ -416,6 +427,7 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
         const membersToMove = selectedMemberIds.filter(id => id !== newHeadId);
 
         const newRecordPayload = {
+            id: generateId(),
             circle_type: recordToSplit.circleType,
             head_full_name: newHeadMember.fullName,
             head_surname: newHeadMember.surname || recordToSplit.headSurname,
@@ -847,6 +859,7 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
               <th className="w-20">اللقب</th>
               <th className="text-right px-2">الأم</th>
               <th className="w-18">التولد</th>
+              <th className="w-16">أفراد الأسرة</th>
               <th className="w-14">الصلة</th>
               <th className="w-40">المكتب</th>
               <th className="w-24">الهاتف</th>
@@ -909,6 +922,7 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
                     <td className={`font-black text-[10px] text-slate-950 ${textClass}`}>{r.headSurname || '—'}</td>
                     <td className={`text-right font-black px-2 text-[10px] truncate max-w-[100px] text-slate-950 ${textClass}`}>{r.headMotherName}</td>
                     <td className={`text-center font-black text-[10px] text-slate-950 ${textClass}`}>{r.headDob}</td>
+                    <td className={`text-center font-black text-[10px] text-blue-700 ${textClass}`}>{r.familyMembers?.length || 0}</td>
                     <td className="text-center"><span className="bg-indigo-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded">رئيس</span></td>
                     <td className={`font-black text-[10px] truncate max-w-[150px] ${isSelected ? 'text-black' : 'text-indigo-700'}`}>{r.affiliation}</td>
                     <td className={`text-center font-black text-[10px] text-slate-950 ${textClass}`} dir="ltr">{r.headPhone}</td>
@@ -934,11 +948,12 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
                     <tr key={m.id} className={`${isActuallyBooked && !isSelected ? 'bg-green-50' : ''} ${isUploaded && !isSelected ? 'bg-fuchsia-50' : ''} ${isDuplicate && !isSelected ? 'bg-red-50' : ''} ${isSelected ? 'bg-indigo-50' : ''} border-b border-slate-50 text-[10px] cursor-pointer select-none`} onClick={(e) => handleContextMenuClick(e, m, 'member', r)} onContextMenu={(e) => handleContextMenuClick(e, m, 'member', r)}>
                       <td colSpan={2}></td>
                       <td className={`text-right font-black px-2 pr-6 ${isSelected ? 'text-black' : 'text-slate-700'}`}>{m.fullName}</td>
-                      <td className={`font-black ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.surname || '—'}</td>
-                      <td className={`text-right font-black px-2 ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.motherName}</td>
+                      <td className={`font-black ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.surname || r.headSurname || '—'}</td>
+                      <td className={`text-right font-black px-2 ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.motherName || r.headMotherName || '—'}</td>
                       <td className={`text-center font-black ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.dob}</td>
+                      <td></td>
                       <td className="text-center"><span className="bg-slate-100 text-slate-500 text-[8px] font-black px-1.5 py-0.5 rounded">{m.relationship}</span></td>
-                      <td colSpan={isAdmin ? 10 : 8}></td>
+                      <td colSpan={isAdmin ? 11 : 9}></td>
                     </tr>
                   ))}
                 </React.Fragment>

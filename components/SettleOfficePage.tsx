@@ -29,8 +29,8 @@ const SettleOfficePage: React.FC<SettleOfficePageProps> = ({ office, onGoBack, o
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8 animate-scale-up pb-40">
-      <div className="bg-white p-8 rounded-[3rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden">
+    <div className="max-w-7xl mx-auto space-y-8 animate-scale-up pb-40">
+      <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 z-10 p-4">
           <button onClick={onGoBack} className="p-3 bg-white text-slate-600 rounded-full shadow-lg border border-slate-100 hover:bg-slate-50 transition-all flex items-center justify-center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m15 18-6-6 6-6"/></svg></button>
         </div>

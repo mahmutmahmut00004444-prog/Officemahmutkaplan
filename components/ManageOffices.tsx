@@ -229,7 +229,7 @@ const ManageOffices: React.FC<ManageOfficesProps> = ({ showToast, loggedInUser, 
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-scale-up pb-40">
+    <div className="max-w-7xl mx-auto space-y-8 animate-scale-up pb-40">
       {deleteOfficeConfirm && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-scale-up">
           <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center border-2 border-slate-900 shadow-2xl relative overflow-hidden">
@@ -321,7 +321,7 @@ const ManageOffices: React.FC<ManageOfficesProps> = ({ showToast, loggedInUser, 
         title={currentContextMenuOffice ? `إدارة المكتب: ${currentContextMenuOffice.office_name}` : ''}
       />
 
-      <div className="bg-white p-8 rounded-[3rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden">
+      <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 z-10 p-4"><button onClick={onGoBack} className="p-3 bg-white text-slate-600 rounded-full shadow-lg border border-slate-100 hover:bg-slate-50 transition-all flex items-center justify-center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m15 18-6-6 6-6"/></svg></button></div>
         <div className="relative pt-10">
           <div className="flex items-center justify-between mb-4">

@@ -245,7 +245,7 @@ export default function BookingSourcesManager({ showToast, loggedInUser, fetchAl
           { label: 'حذف حساب المصدر', onClick: () => setDeleteSourceConfirm(currentContextMenuSource!), isDestructive: true },
       ]} title={currentContextMenuSource ? `خيارات المصدر: ${currentContextMenuSource.sourceName}` : ''} />
 
-      <div className="bg-white p-8 rounded-[3rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden">
+      <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 p-4"><button onClick={onGoBack} className="p-3 bg-white text-slate-600 rounded-full shadow-lg border border-slate-100 hover:bg-slate-50 hover:text-slate-800 transition-all active:scale-95 flex items-center justify-center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m15 18-6-6 6-6"/></svg></button></div>
         <div className="pt-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>

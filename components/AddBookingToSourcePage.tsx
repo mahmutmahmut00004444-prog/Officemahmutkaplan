@@ -106,7 +106,6 @@ export default function AddBookingToSourcePage({ onGoBack, source, allReviewers,
               }
             });
             
-            // FIX: Sanitize the response text to remove potential Markdown code blocks
             let jsonText = resp.text || '{}';
             jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
             const res = JSON.parse(jsonText);
@@ -182,25 +181,29 @@ export default function AddBookingToSourcePage({ onGoBack, source, allReviewers,
   };
 
   return (
-    <div className="max-w-5xl mx-auto pb-40 animate-scale-up space-y-6">
-      <div className="bg-white p-8 md:p-12 rounded-[3.5rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden">
+    <div className="max-w-7xl mx-auto pb-40 animate-scale-up space-y-6">
+      <div className="bg-white p-8 md:p-12 rounded-[2.5rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-blue-600 via-emerald-500 to-blue-600"></div>
-        <div className="flex items-center justify-between mb-10 pt-4">
-           <div>
-              <h3 className="text-3xl font-black text-slate-900 mb-1">إضافة حجوزات مكتملة</h3>
-              <p className="text-blue-600 font-bold flex items-center gap-2">المصدر الحالي: {source.sourceName}</p>
-           </div>
-           <button onClick={onGoBack} className="p-4 bg-slate-100 text-slate-500 rounded-full hover:bg-slate-200 transition-colors"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m15 18-6-6 6-6"/></svg></button>
+        
+        <div className="absolute top-0 right-0 p-4 z-10">
+          <button onClick={onGoBack} className="p-3 bg-white text-slate-600 rounded-full shadow-lg border border-slate-100 hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-2 mb-10 pt-4">
+           <h3 className="text-3xl font-black text-slate-900 mb-1">إضافة حجوزات مكتملة</h3>
+           <p className="text-blue-600 font-bold flex items-center gap-2">المصدر الحالي: {source.sourceName}</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-          <div onClick={() => !loading && fileInputRef.current?.click()} className="p-12 border-4 border-dashed rounded-[3rem] flex flex-col items-center justify-center gap-5 cursor-pointer hover:border-emerald-600 hover:bg-emerald-50 transition-all shadow-inner">
+          <div onClick={() => !loading && fileInputRef.current?.click()} className="p-12 border-4 border-dashed rounded-[3rem] flex flex-col items-center justify-center gap-5 cursor-pointer hover:border-emerald-600 hover:bg-emerald-50 transition-all shadow-inner group">
             <input type="file" multiple hidden ref={fileInputRef} accept="image/*" onChange={e => e.target.files && processImages(e.target.files)} />
-            <div className="w-24 h-24 bg-emerald-600 text-white rounded-[2rem] flex items-center justify-center shadow-xl"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 13 7 8"/><line x1="12" x2="12" y1="13" y2="1"/></svg></div>
+            <div className="w-24 h-24 bg-emerald-600 text-white rounded-[2rem] flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 13 7 8"/><line x1="12" x2="12" y1="13" y2="1"/></svg></div>
             <div className="text-center"><span className="text-2xl font-black text-slate-800 block">رفع صور الحجوزات</span><p className="text-slate-400 font-bold mt-1">مطابقة بالاسم الثلاثي والدائرة</p></div>
           </div>
-          <div onClick={() => setShowManualSearch(!showManualSearch)} className={`p-12 border-4 border-dashed rounded-[3rem] flex flex-col items-center justify-center gap-5 cursor-pointer transition-all ${showManualSearch ? 'bg-blue-50 border-blue-600 shadow-lg' : 'hover:border-blue-600 hover:bg-blue-50 shadow-inner'}`}>
-            <div className="w-24 h-24 bg-blue-600 text-white rounded-[2rem] flex items-center justify-center shadow-xl"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
+          <div onClick={() => setShowManualSearch(!showManualSearch)} className={`p-12 border-4 border-dashed rounded-[3rem] flex flex-col items-center justify-center gap-5 cursor-pointer transition-all group ${showManualSearch ? 'bg-blue-50 border-blue-600 shadow-lg' : 'hover:border-blue-600 hover:bg-blue-50 shadow-inner'}`}>
+            <div className="w-24 h-24 bg-blue-600 text-white rounded-[2rem] flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
             <div className="text-center"><span className="text-2xl font-black text-slate-800 block">بحث وإضافة يدوية</span><p className="text-slate-400 font-bold mt-1">اختيار مباشر من قاعدة البيانات</p></div>
           </div>
         </div>
@@ -225,50 +228,48 @@ export default function AddBookingToSourcePage({ onGoBack, source, allReviewers,
         {results.length > 0 && (
           <div className="space-y-8 animate-scale-up pt-8 border-t-2 border-slate-100">
             <div className="flex items-center justify-between">
-              <h4 className="text-2xl font-black text-slate-800">الحجوزات الجاهزة ({results.length})</h4>
-              <button onClick={() => setResults([])} className="text-slate-400 font-bold text-sm hover:text-red-500">إلغاء الكل</button>
+              <h4 className="text-2xl font-black text-slate-900">النتائج الجاهزة ({results.length})</h4>
+              <button onClick={() => setResults([])} className="text-red-500 font-bold hover:underline">مسح الكل</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {results.map((res, i) => (
-                <div key={i} className="bg-white p-6 rounded-[2rem] border-2 border-slate-100 flex items-center gap-6 shadow-sm hover:border-emerald-400 transition-all group">
-                  <div className="relative w-20 h-20 shrink-0 bg-slate-50 rounded-2xl flex items-center justify-center border-2 border-slate-100 overflow-hidden shadow-inner">
-                    {res.image ? <img src={res.image} className="w-full h-full object-cover" /> : <div className="text-slate-200 text-3xl">⌨️</div>}
+              {results.map((item, i) => (
+                <div key={i} className="p-5 rounded-[2rem] bg-emerald-50 border-2 border-emerald-200 flex gap-4 items-center shadow-sm">
+                  {item.image ? (
+                    <img src={item.image} className="w-20 h-20 rounded-2xl object-cover border border-white shadow-md" />
+                  ) : (
+                    <div className="w-20 h-20 rounded-2xl bg-emerald-200 flex items-center justify-center text-emerald-800 text-2xl">📝</div>
+                  )}
+                  <div className="flex-1">
+                    <p className="font-black text-slate-900 text-lg">{item.record.headFullName}</p>
+                    <p className="text-xs font-bold text-emerald-700 mt-1">{CIRCLE_NAMES[item.record.circleType]} | {item.date}</p>
                   </div>
-                  <div className="flex-1 overflow-hidden">
-                    <p className="font-black text-slate-900 text-base truncate">{res.record.headFullName}</p>
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                      <span className="text-[10px] font-black text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-100">{CIRCLE_NAMES[res.record.circleType]}</span>
-                      <span className="text-[10px] font-black text-slate-500 bg-slate-50 px-3 py-1 rounded-full border border-slate-100 italic">{res.date}</span>
-                    </div>
-                  </div>
-                  <button onClick={() => setResults(prev => prev.filter((_, idx) => idx !== i))} className="text-red-300 p-3 hover:text-red-600 transition-all"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+                  <button onClick={() => setResults(prev => prev.filter((_, idx) => idx !== i))} className="w-10 h-10 bg-white text-red-500 rounded-full flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors shadow-sm">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </button>
                 </div>
               ))}
             </div>
-            <div className="pt-6">
-              <button onClick={handleConfirmAndTransfer} disabled={results.length === 0 || loading} className="w-full bg-slate-900 text-white py-7 rounded-[2rem] font-black text-2xl shadow-2xl hover:bg-emerald-700 active:scale-[0.98] transition-all disabled:opacity-30 flex items-center justify-center gap-4">
-                {loading ? (
-                  <div className="flex items-center gap-3">
-                    <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>جاري الحفظ والنقل...</span>
-                  </div>
-                ) : "تأكيد الحجز ونقل السجلات للمكتملة"}
-              </button>
-            </div>
+            <button onClick={handleConfirmAndTransfer} disabled={loading} className="w-full bg-slate-900 text-white py-5 rounded-[2rem] font-black text-xl shadow-2xl shadow-slate-300 hover:bg-emerald-600 active:scale-95 transition-all">
+              {loading ? 'جاري الحفظ...' : 'تأكيد ونقل الكل للمكتملة'}
+            </button>
           </div>
         )}
 
         {failedRecognitions.length > 0 && (
-          <div className="mt-12 p-8 bg-red-50 rounded-[3rem] border-2 border-red-100 border-dashed">
-             <h4 className="text-red-600 font-black mb-6 flex items-center gap-3 text-lg"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> صور لم يتم التعرف عليها أو لا يوجد سجل مطابق ({failedRecognitions.length})</h4>
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-               {failedRecognitions.map((fail, i) => (
-                 <div key={i} className="bg-white p-4 rounded-2xl border border-red-100 flex gap-4 items-center shadow-sm opacity-80">
-                    <img src={fail.imageData} className="w-16 h-16 rounded-xl object-cover grayscale" />
-                    <div className="overflow-hidden"><p className="text-xs font-black text-slate-800 truncate">{fail.fileName}</p><p className="text-[10px] font-bold text-red-500 mt-1 leading-tight">{fail.reason}</p></div>
-                 </div>
-               ))}
-             </div>
+          <div className="mt-12 pt-8 border-t-2 border-red-100">
+            <h4 className="text-xl font-black text-red-600 mb-4">فشل التعرف ({failedRecognitions.length})</h4>
+            <div className="grid grid-cols-1 gap-4">
+              {failedRecognitions.map((fail, i) => (
+                <div key={i} className="p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-4 items-center">
+                  <img src={fail.imageData} className="w-16 h-16 rounded-xl object-cover grayscale" />
+                  <div>
+                    <p className="text-xs font-bold text-red-800">{fail.reason}</p>
+                    <p className="text-[10px] text-red-400 mt-1">{fail.fileName}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setFailedRecognitions([])} className="mt-4 text-xs font-bold text-slate-400 hover:text-slate-600">تجاهل ومسح القائمة</button>
           </div>
         )}
       </div>

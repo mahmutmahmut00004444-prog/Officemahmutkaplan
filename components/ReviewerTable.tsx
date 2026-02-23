@@ -39,6 +39,17 @@ interface CurrentContextMenuData {
   parentRecord?: Reviewer;
 }
 
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 export default function ReviewerTable({ 
   reviewers, 
   globalNameFrequency,
@@ -372,6 +383,7 @@ export default function ReviewerTable({
 
         // 1. Create New Reviewer
         const newReviewerPayload = {
+            id: generateId(),
             circle_type: recordToSplit.circleType,
             head_full_name: newHeadMember.fullName,
             head_surname: newHeadMember.surname || recordToSplit.headSurname,
@@ -806,6 +818,7 @@ export default function ReviewerTable({
               <th className="w-20">اللقب</th>
               <th className="text-right px-2">الأم</th>
               <th className="w-18">التولد</th>
+              <th className="w-16">أفراد الأسرة</th>
               <th className="w-14">الصلة</th>
               <th className="w-24">الهاتف</th>
               <th className="w-18">الحالة للحجز</th>
@@ -875,6 +888,7 @@ export default function ReviewerTable({
                     <td className={`font-black text-[10px] text-slate-950 ${textClass}`}>{r.headSurname || '—'}</td>
                     <td className={`text-right font-black px-2 text-[10px] truncate max-w-[100px] text-slate-950 ${textClass}`}>{r.headMotherName}</td>
                     <td className={`text-center font-black text-[10px] text-slate-950 ${textClass}`} dir="ltr">{r.headDob}</td>
+                    <td className={`text-center font-black text-[10px] text-blue-700 ${textClass}`}>{r.familyMembers?.length || 0}</td>
                     <td className="text-center"><span className="bg-slate-800 text-white text-[8px] font-black px-1.5 py-0.5 rounded">رئيس</span></td>
                     <td className={`text-center font-black text-[10px] text-slate-950 ${textClass}`} dir="ltr">{r.headPhone}</td>
                     
@@ -899,11 +913,12 @@ export default function ReviewerTable({
                     <tr key={m.id} className={`${isActuallyBooked && !isSelected ? 'bg-green-50' : ''} ${isUploaded && !isSelected ? 'bg-fuchsia-50' : ''} ${isDuplicate && !isSelected ? 'bg-red-50' : ''} ${isSelected ? 'bg-blue-50' : ''} border-b border-slate-50 text-[10px] cursor-pointer select-none`} onClick={(e) => handleContextMenuClick(e, m, 'member', r)} onContextMenu={(e) => handleContextMenuClick(e, m, 'member', r)}>
                       <td colSpan={2}></td>
                       <td className={`text-right font-black px-2 pr-6 ${isSelected ? 'text-black' : 'text-slate-700'}`}>{m.fullName}</td>
-                      <td className={`font-black ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.surname || '—'}</td>
-                      <td className={`text-right font-black px-2 ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.motherName}</td>
+                      <td className={`font-black ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.surname || r.headSurname || '—'}</td>
+                      <td className={`text-right font-black px-2 ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.motherName || r.headMotherName || '—'}</td>
                       <td className={`text-center font-black ${isSelected ? 'text-black' : 'text-slate-600'}`} dir="ltr">{m.dob}</td>
+                      <td></td>
                       <td className="text-center"><span className="bg-slate-100 text-slate-500 text-[8px] font-black px-1.5 py-0.5 rounded">{m.relationship}</span></td>
-                      <td colSpan={9}></td>
+                      <td colSpan={10}></td>
                     </tr>
                   ))}
                 </React.Fragment>

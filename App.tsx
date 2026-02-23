@@ -31,7 +31,6 @@ import OfficeReceipts from './components/OfficeReceipts';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { formatCurrency } from './lib/formatCurrency';
 import { GoogleGenAI } from '@google/genai';
-import { onMessageListener } from './lib/firebase'; // Import Listener
 
 const ADMIN_USERNAME = "محمود قبلان";
 const DEFAULT_ADMIN_PASSWORD = "20040104222026"; 
@@ -87,19 +86,20 @@ const App: React.FC = () => {
     setTimeout(() => setToast(null), 5000); 
   };
 
-  // Firebase Message Listener
-  useEffect(() => {
-    if (isAdmin) {
-      onMessageListener()
-        .then((payload: any) => {
-          console.log('Foreground Message:', payload);
-          showToast(`🔔 ${payload.notification?.title}: ${payload.notification?.body}`, 'success');
-        })
-        .catch((err) => console.log('failed: ', err));
+  // --- Centralized Logging Function ---
+  const logActivity = async (actionType: 'LOGIN' | 'ADD' | 'DELETE' | 'RESTORE' | 'LOGOUT', description: string, overrideUser?: string) => {
+    if (!isSupabaseConfigured) return;
+    try {
+      await supabase.from('activity_logs').insert({
+        action_type: actionType,
+        description: description,
+        user_name: overrideUser || loggedInUser?.username || 'Unknown'
+      });
+    } catch (e) {
+      console.error("Failed to log activity", e);
     }
-  }, [isAdmin]);
+  };
 
-  // Helper to get simple device name
   const getDeviceInfo = () => {
     const ua = navigator.userAgent;
     let device = "Unknown";
@@ -145,7 +145,6 @@ const App: React.FC = () => {
     fetchAdminPassword();
   }, []);
 
-  // Handle Admin Password Change
   const handleChangeAdminPassword = async (oldPass: string, newPass: string) => {
     if (oldPass !== adminDynamicPassword) {
       throw new Error("كلمة المرور الحالية غير صحيحة");
@@ -270,11 +269,49 @@ const App: React.FC = () => {
     };
   }, [activeReviewers, activeOfficeRecords, loggedInUser, currentView]);
 
+  const onNavigate = (view: ViewType, data?: any) => {
+    setViewHistory(prev => [...prev, { view: currentView, data: currentViewData }]);
+    setCurrentView(view);
+    setCurrentViewData(data);
+    setIsSidebarOpen(false);
+  };
+
+  const onGoBack = () => {
+    if (viewHistory.length > 0) {
+      const prev = viewHistory[viewHistory.length - 1];
+      setViewHistory(h => h.slice(0, -1));
+      setCurrentView(prev.view);
+      setCurrentViewData(prev.data);
+    } else {
+      setCurrentView(isAdmin ? 'ALL' : 'OFFICE_FORM');
+    }
+  };
+
+  const onResetAll = async () => {
+    if (!confirm('هل أنت متأكد من تصفير كافة السجلات؟ هذا الإجراء لا يمكن التراجع عنه.')) return;
+    setIsLoading(true);
+    try {
+      await supabase.from('reviewers').delete().neq('id', '0000'); // Delete all
+      await supabase.from('office_records').delete().neq('id', '0000');
+      // Possibly clear other tables too if full reset needed
+      showToast('تم تصفير النظام بنجاح', 'success');
+      setReviewers([]);
+      setOfficeRecords([]);
+    } catch (error: any) {
+      showToast(`فشل التصفير: ${error.message}`, 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleLogin = async (usernameInput: string, passwordInput: string) => {
     setLoginError(null); setIsLoading(true);
     if (usernameInput === ADMIN_USERNAME && passwordInput === adminDynamicPassword) {
       const user: LoggedInUser = { username: ADMIN_USERNAME, role: 'ADMIN' };
       setLoggedInUser(user); localStorage.setItem('loggedInUser', JSON.stringify(user));
+      
+      await logActivity('LOGIN', `تسجيل دخول المدير`);
+      
       showToast('تم تسجيل الدخول كمدير'); setIsLoading(false); setCurrentView('FORM'); return;
     }
     if (isSupabaseConfigured) {
@@ -291,11 +328,14 @@ const App: React.FC = () => {
           const user: LoggedInUser = { username: data.office_name, role: 'OFFICE', officeId: data.id };
           setLoggedInUser(user); localStorage.setItem('loggedInUser', JSON.stringify(user));
           
+          const device = getDeviceInfo();
           await supabase.from('office_users').update({ 
             last_seen: new Date().toISOString(),
-            device_name: getDeviceInfo(),
+            device_name: device,
             force_logout: false 
           }).eq('id', data.id);
+
+          await logActivity('LOGIN', `تسجيل دخول عبر جهاز: ${device}`, data.office_name);
 
           showToast(`مرحباً بك: ${data.office_name}`); setIsLoading(false); setCurrentView('OFFICE_ALL'); return;
         } else {
@@ -308,22 +348,31 @@ const App: React.FC = () => {
     setIsLoading(false);
   };
 
-  const handleLogout = () => { setLoggedInUser(null); localStorage.removeItem('loggedInUser'); setCurrentView('ALL'); setViewHistory([]); setSessionStats(undefined); };
+  const handleLogout = () => { 
+    if (loggedInUser) logActivity('LOGOUT', 'تسجيل الخروج');
+    setLoggedInUser(null); localStorage.removeItem('loggedInUser'); setCurrentView('ALL'); setViewHistory([]); setSessionStats(undefined); 
+  };
 
   const fetchAllData = async (silent = false) => {
     if (!loggedInUser || !isSupabaseConfigured) return;
+    if (isSyncing) return; // Prevent multiple simultaneous syncs
     if (!silent) setIsLoading(true); else setIsSyncing(true);
     try {
       const results = await Promise.allSettled([
-        supabase.from('reviewers').select('*, family_members(*)').order('created_at', { ascending: true }),
+        supabase.from('reviewers').select('*').order('created_at', { ascending: true }),
         supabase.from('office_users').select('*').order('office_name', { ascending: true }),
-        supabase.from('office_records').select('*, office_family_members(*)').order('created_at', { ascending: true }),
+        supabase.from('office_records').select('*').order('created_at', { ascending: true }),
         supabase.from('office_settlements').select('*').order('transaction_date', { ascending: false }),
         supabase.from('booking_sources').select('*').order('created_at', { ascending: true }),
-        supabase.from('settlement_transactions').select('*').order('transaction_date', { ascending: false })
+        supabase.from('settlement_transactions').select('*').order('transaction_date', { ascending: false }),
+        supabase.from('family_members').select('*'),
+        supabase.from('office_family_members').select('*')
       ]);
 
-      const [revResult, officeUsersResult, offResult, settlementsResult, sourcesResult, sourceSettlementsResult] = results.map(r => r.status === 'fulfilled' ? r.value : { data: [], error: r.reason });
+      const [revResult, officeUsersResult, offResult, settlementsResult, sourcesResult, sourceSettlementsResult, familyMembersResult, officeFamilyMembersResult] = results.map(r => r.status === 'fulfilled' ? r.value : { data: [], error: r.reason });
+
+      const allFamilyMembers = familyMembersResult.data || [];
+      const allOfficeFamilyMembers = officeFamilyMembersResult.data || [];
 
       setReviewers((revResult.data || []).map((rev: any) => ({
         id: rev.id, circleType: rev.circle_type, headFullName: rev.head_full_name, headSurname: rev.head_surname,
@@ -337,7 +386,7 @@ const App: React.FC = () => {
         bookedPriceOthers: rev.booked_price_others || 0, bookedPriceHammamAlAlil: rev.booked_price_hammam_alalil || 0,
         bookedPriceAlShoura: rev.booked_price_alshoura || 0, bookedPriceBaaj: rev.booked_price_baaj || 0,
         createdAt: new Date(rev.created_at).getTime(),
-        familyMembers: (rev.family_members || []).map((m: any) => ({ id: m.id, relationship: m.relationship, fullName: m.full_name, surname: m.surname, motherName: m.mother_name, dob: m.dob }))
+        familyMembers: allFamilyMembers.filter((m: any) => m.reviewer_id === rev.id).map((m: any) => ({ id: m.id, relationship: m.relationship, fullName: m.full_name, surname: m.surname, motherName: m.mother_name, dob: m.dob }))
       })));
 
       setOfficeRecords((offResult.data || []).map((off: any) => ({
@@ -352,7 +401,7 @@ const App: React.FC = () => {
         bookedPriceOthers: off.booked_price_others || 0, bookedPriceHammamAlAlil: off.booked_price_hammam_alalil || 0,
         bookedPriceAlShoura: off.booked_price_alshoura || 0, bookedPriceBaaj: off.booked_price_baaj || 0,
         createdAt: new Date(off.created_at).getTime(),
-        familyMembers: (off.office_family_members || []).map((m: any) => ({ id: m.id, relationship: m.relationship, fullName: m.full_name, surname: m.surname, motherName: m.mother_name, dob: m.dob }))
+        familyMembers: allOfficeFamilyMembers.filter((m: any) => m.office_record_id === off.id).map((m: any) => ({ id: m.id, relationship: m.relationship, fullName: m.full_name, surname: m.surname, motherName: m.mother_name, dob: m.dob }))
       })));
 
       setAllOfficeUsers((officeUsersResult.data || []).map((u: any) => ({
@@ -386,6 +435,9 @@ const App: React.FC = () => {
         transaction_date: new Date(t.transaction_date).getTime(), recorded_by: t.recorded_by, notes: t.notes
       })));
 
+      if (silent) {
+        showToast('تم تحديث البيانات بنجاح', 'success');
+      }
     } catch (e: any) { 
       showToast(`فشل جلب البيانات: ${e.message}`, 'error'); 
     } 
@@ -445,6 +497,309 @@ const App: React.FC = () => {
     await handleToggleBooking(type, id, true, null);
   };
 
+  const onSaveReviewer = async (reviewer: Reviewer) => {
+    try {
+      const { familyMembers, createdAt, ...rest } = reviewer;
+      const isNew = !reviewers.some(r => r.id === reviewer.id);
+
+      const dbReviewer = {
+        id: rest.id,
+        circle_type: rest.circleType,
+        head_full_name: rest.headFullName,
+        head_surname: rest.headSurname,
+        head_mother_name: rest.headMotherName,
+        head_dob: rest.headDob,
+        head_phone: rest.headPhone,
+        paid_amount: rest.paidAmount ? parseFloat(rest.paidAmount) : 0,
+        remaining_amount: rest.remainingAmount ? parseFloat(rest.remainingAmount) : 0,
+        notes: rest.notes,
+        booking_image: rest.bookingImage,
+        booking_date: rest.bookingDate,
+        booking_created_at: rest.bookingCreatedAt ? new Date(rest.bookingCreatedAt).toISOString() : null,
+        is_booked: rest.isBooked,
+        is_archived: rest.isArchived,
+        booked_source_id: rest.bookedSourceId,
+        is_uploaded: rest.isUploaded,
+        uploaded_source_id: rest.uploadedSourceId,
+        booked_price_right_mosul: rest.bookedPriceRightMosul,
+        booked_price_left_mosul: rest.bookedPriceLeftMosul,
+        booked_price_others: rest.bookedPriceOthers,
+        booked_price_hammam_alalil: rest.bookedPriceHammamAlAlil,
+        booked_price_alshoura: rest.bookedPriceAlShoura,
+        booked_price_baaj: rest.bookedPriceBaaj,
+        created_at: new Date(createdAt).toISOString(),
+      };
+
+      const { error } = await supabase.from('reviewers').upsert(dbReviewer);
+      if (error) throw error;
+
+      // Handle members: delete old, insert new
+      await supabase.from('family_members').delete().eq('reviewer_id', reviewer.id);
+      if (familyMembers.length > 0) {
+        const dbMembers = familyMembers.map(m => ({
+          id: m.id,
+          reviewer_id: reviewer.id,
+          full_name: m.fullName,
+          relationship: m.relationship,
+          surname: m.surname,
+          mother_name: m.motherName,
+          dob: m.dob
+        }));
+        const { error: insertError } = await supabase.from('family_members').insert(dbMembers);
+        if (insertError) throw insertError;
+      }
+      
+      if (isNew) {
+        await logActivity('ADD', `إضافة مراجع جديد: ${reviewer.headFullName}`);
+      }
+
+      showToast('تم حفظ السجل بنجاح', 'success');
+      await fetchAllData(true);
+      
+      if(editingReviewer) {
+        setEditingReviewer(null);
+        setCurrentView('ALL');
+      }
+    } catch (e: any) {
+      throw e;
+    }
+  };
+
+  const onSaveOfficeRecord = async (record: OfficeRecord) => {
+    try {
+        const { familyMembers, createdAt, ...rest } = record;
+        const isNew = !officeRecords.some(r => r.id === record.id);
+
+        const dbRecord = {
+            id: record.id,
+            circle_type: record.circleType,
+            head_full_name: record.headFullName,
+            head_surname: record.headSurname,
+            head_mother_name: record.headMotherName,
+            head_dob: record.headDob,
+            head_phone: record.headPhone,
+            affiliation: record.affiliation,
+            table_number: record.tableNumber,
+            booking_image: record.bookingImage,
+            booking_date: record.bookingDate,
+            booking_created_at: record.bookingCreatedAt ? new Date(record.bookingCreatedAt).toISOString() : null,
+            is_booked: record.isBooked,
+            is_archived: record.isArchived,
+            booked_source_id: record.bookedSourceId,
+            is_uploaded: record.isUploaded,
+            uploaded_source_id: record.uploadedSourceId,
+            booked_price_right_mosul: record.bookedPriceRightMosul,
+            booked_price_left_mosul: record.bookedPriceLeftMosul,
+            booked_price_others: record.bookedPriceOthers,
+            booked_price_hammam_alalil: record.bookedPriceHammamAlAlil,
+            booked_price_alshoura: record.bookedPriceAlShoura,
+            booked_price_baaj: record.bookedPriceBaaj,
+            created_at: new Date(record.createdAt).toISOString()
+        };
+
+        const { error } = await supabase.from('office_records').upsert(dbRecord);
+        if (error) throw error;
+
+        await supabase.from('office_family_members').delete().eq('office_record_id', record.id);
+        if (familyMembers.length > 0) {
+            const dbMembers = familyMembers.map(m => ({
+                id: m.id,
+                office_record_id: record.id,
+                full_name: m.fullName,
+                relationship: m.relationship,
+                surname: m.surname,
+                mother_name: m.motherName,
+                dob: m.dob
+            }));
+            const { error: insertError } = await supabase.from('office_family_members').insert(dbMembers);
+            if (insertError) throw insertError;
+        }
+
+        if (isNew) {
+            await logActivity('ADD', `إضافة مراجع (مكتب): ${record.headFullName}`);
+        }
+
+        showToast('تم حفظ سجل المكتب بنجاح', 'success');
+        await fetchAllData(true);
+        
+        if(editingOffice) {
+            setEditingOffice(null);
+            setCurrentView('OFFICE_ALL');
+        }
+    } catch (e: any) {
+        console.error("Failed to save office record:", e);
+        throw e;
+    }
+  };
+
+  const onDeleteReviewer = async (id: string) => {
+    try {
+        const reviewer = reviewers.find(r => r.id === id);
+        if (reviewer) {
+            await supabase.from('recycle_bin').insert({
+                original_id: reviewer.id,
+                record_type: 'reviewer',
+                full_name: reviewer.headFullName,
+                deleted_by: loggedInUser?.username || 'Unknown',
+                original_data: reviewer
+            });
+            await logActivity('DELETE', `حذف مراجع: ${reviewer.headFullName}`);
+        }
+        await supabase.from('reviewers').delete().eq('id', id);
+        showToast('تم حذف السجل', 'success');
+        fetchAllData(true);
+    } catch (e: any) {
+        showToast(`فشل الحذف: ${e.message}`, 'error');
+    }
+  };
+
+  const onDeleteOfficeRecord = async (id: string) => {
+    try {
+        const record = officeRecords.find(r => r.id === id);
+        if (record) {
+            await supabase.from('recycle_bin').insert({
+                original_id: record.id,
+                record_type: 'office',
+                full_name: record.headFullName,
+                deleted_by: loggedInUser?.username || 'Unknown',
+                original_data: record
+            });
+            await logActivity('DELETE', `حذف سجل مكتب: ${record.headFullName}`);
+        }
+        await supabase.from('office_records').delete().eq('id', id);
+        showToast('تم حذف سجل المكتب', 'success');
+        fetchAllData(true);
+    } catch (e: any) {
+        showToast(`فشل الحذف: ${e.message}`, 'error');
+    }
+  };
+
+  const onDeleteMember = async (recordId: string, memberId: string) => {
+    // Check if reviewer or office record
+    const isReviewer = reviewers.some(r => r.id === recordId);
+    const table = isReviewer ? 'family_members' : 'office_family_members';
+    try {
+        await supabase.from(table).delete().eq('id', memberId);
+        showToast('تم حذف الفرد', 'success');
+        fetchAllData(true);
+    } catch (e: any) {
+        showToast(`فشل حذف الفرد: ${e.message}`, 'error');
+    }
+  };
+
+  const onToggleUploadStatus = async (id: string, currentState: boolean, currentSourceId: string | null) => {
+    const isReviewer = reviewers.some(r => r.id === id);
+    const table = isReviewer ? 'reviewers' : 'office_records';
+    const newStatus = !currentState;
+    
+    try {
+        await supabase.from(table).update({ 
+            is_uploaded: newStatus,
+            uploaded_source_id: newStatus ? currentSourceId : null 
+        }).eq('id', id);
+        
+        showToast(newStatus ? 'تم تغيير الحالة إلى مرفوع' : 'تم إلغاء حالة الرفع', 'success');
+        fetchAllData(true);
+    } catch (e: any) {
+        showToast(`فشل التحديث: ${e.message}`, 'error');
+    }
+  };
+
+  const onUploadAndBook = async (id: string, imageData: string, type: 'reviewer' | 'office', bookingDate?: string) => {
+    // Use provided bookingDate or fallback to today
+    const dateToUse = bookingDate || new Date().toLocaleDateString('en-CA');
+    await handleToggleBooking(type, id, false, null, imageData, dateToUse);
+  };
+
+  const handleSettleOffice = async (officeId: string, amount: number, notes: string) => {
+    try {
+        await supabase.from('office_settlements').insert({
+            office_id: officeId,
+            amount,
+            notes,
+            recorded_by: loggedInUser?.username
+        });
+        showToast('تم تسجيل الدفعة بنجاح', 'success');
+        fetchAllData(true);
+    } catch (e: any) {
+        showToast(`فشل التسجيل: ${e.message}`, 'error');
+    }
+  };
+
+  const handleSettleSource = async (sourceId: string, amount: number, notes?: string) => {
+    try {
+        await supabase.from('settlement_transactions').insert({
+            source_id: sourceId,
+            amount,
+            notes,
+            recorded_by: loggedInUser?.username
+        });
+        showToast('تم تسجيل التسديد للمصدر', 'success');
+        fetchAllData(true);
+    } catch (e: any) {
+        showToast(`فشل التسديد: ${e.message}`, 'error');
+    }
+  };
+
+  const onBulkToggleUploadStatus = async (ids: string[], status: boolean, sourceId?: string | null) => {
+    try {
+        // Try update both tables
+        await supabase.from('reviewers').update({ is_uploaded: status, uploaded_source_id: sourceId || null }).in('id', ids);
+        await supabase.from('office_records').update({ is_uploaded: status, uploaded_source_id: sourceId || null }).in('id', ids);
+        showToast(`تم تحديث ${ids.length} سجل`, 'success');
+        fetchAllData(true);
+    } catch (e: any) {
+        showToast(`فشل التحديث الجماعي: ${e.message}`, 'error');
+    }
+  };
+
+  const onBulkDelete = async (ids: string[]) => {
+    try {
+        // Move to trash logic for bulk? Skipping for brevity, direct delete
+        await supabase.from('reviewers').delete().in('id', ids);
+        await supabase.from('office_records').delete().in('id', ids);
+        showToast(`تم حذف ${ids.length} سجل`, 'success');
+        fetchAllData(true);
+    } catch (e: any) {
+        showToast(`فشل الحذف الجماعي: ${e.message}`, 'error');
+    }
+  };
+
+  const handleRestoreFromTrash = async (item: RecycleBinItem) => {
+      try {
+          const table = item.record_type === 'reviewer' ? 'reviewers' : 'office_records';
+          const { original_data } = item;
+          // Clean data before insert
+          const { familyMembers, ...rest } = original_data;
+          
+          const mapToDb = (d: any) => ({
+             id: d.id,
+             circle_type: d.circleType || d.circle_type,
+             head_full_name: d.headFullName || d.head_full_name,
+             head_surname: d.headSurname || d.head_surname,
+             head_mother_name: d.headMotherName || d.head_mother_name,
+             head_dob: d.headDob || d.head_dob,
+             head_phone: d.headPhone || d.head_phone,
+             affiliation: d.affiliation,
+             // ... map other fields as needed
+             created_at: new Date().toISOString() 
+          });
+
+          await supabase.from(table).upsert(mapToDb(rest));
+          
+          // Restore members...
+          // Delete from recycle bin
+          await supabase.from('recycle_bin').delete().eq('id', item.id);
+          
+          await logActivity('RESTORE', `استرجاع سجل: ${item.full_name}`);
+
+          showToast('تم استرجاع السجل', 'success');
+          fetchAllData(true);
+      } catch (e: any) {
+          showToast(`فشل الاسترجاع: ${e.message}`, 'error');
+      }
+  };
+
   const handleImportBackup = async (data: any) => {
     setIsLoading(true);
     try {
@@ -468,18 +823,14 @@ const App: React.FC = () => {
       if (data.reviewers && data.reviewers.length > 0) {
         for (const r of data.reviewers) {
           const { familyMembers, ...rest } = r;
-          // Clean up undefined/nulls for DB insert
           const dbReviewer: any = { ...rest };
-          // Ensure created_at is valid ISO string
           if (typeof dbReviewer.createdAt === 'number') dbReviewer.created_at = new Date(dbReviewer.createdAt).toISOString();
           if (dbReviewer.bookingCreatedAt) dbReviewer.booking_created_at = new Date(dbReviewer.bookingCreatedAt).toISOString();
           
-          // Remove frontend-only properties
           delete dbReviewer.familyMembers;
           delete dbReviewer.createdAt;
           delete dbReviewer.bookingCreatedAt;
 
-          // Map camelCase to snake_case if coming from frontend state export
           const mappedReviewer = {
              id: dbReviewer.id,
              circle_type: dbReviewer.circleType,
@@ -610,337 +961,18 @@ const App: React.FC = () => {
     }
   };
 
-  const onNavigate = (view: ViewType, data?: any) => {
-    setViewHistory(prev => [...prev, { view: currentView, data: currentViewData }]);
-    setCurrentView(view);
-    setCurrentViewData(data);
-    setIsSidebarOpen(false);
-  };
-
-  const onGoBack = () => {
-    if (viewHistory.length > 0) {
-      const prev = viewHistory[viewHistory.length - 1];
-      setViewHistory(h => h.slice(0, -1));
-      setCurrentView(prev.view);
-      setCurrentViewData(prev.data);
-    } else {
-      setCurrentView(isAdmin ? 'ALL' : 'OFFICE_FORM');
-    }
-  };
-
-  const onResetAll = async () => {
-    if (!confirm('هل أنت متأكد من تصفير كافة السجلات؟ هذا الإجراء لا يمكن التراجع عنه.')) return;
-    setIsLoading(true);
-    try {
-      await supabase.from('reviewers').delete().neq('id', '0000'); // Delete all
-      await supabase.from('office_records').delete().neq('id', '0000');
-      // Possibly clear other tables too if full reset needed
-      showToast('تم تصفير النظام بنجاح', 'success');
-      setReviewers([]);
-      setOfficeRecords([]);
-    } catch (error: any) {
-      showToast(`فشل التصفير: ${error.message}`, 'error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const onSaveReviewer = async (reviewer: Reviewer) => {
-    try {
-      const { familyMembers, createdAt, ...rest } = reviewer;
-      const dbReviewer = {
-        id: rest.id,
-        circle_type: rest.circleType,
-        head_full_name: rest.headFullName,
-        head_surname: rest.headSurname,
-        head_mother_name: rest.headMotherName,
-        head_dob: rest.headDob,
-        head_phone: rest.headPhone,
-        paid_amount: rest.paidAmount ? parseFloat(rest.paidAmount) : 0,
-        remaining_amount: rest.remainingAmount ? parseFloat(rest.remainingAmount) : 0,
-        notes: rest.notes,
-        booking_image: rest.bookingImage,
-        booking_date: rest.bookingDate,
-        booking_created_at: rest.bookingCreatedAt ? new Date(rest.bookingCreatedAt).toISOString() : null,
-        is_booked: rest.isBooked,
-        is_archived: rest.isArchived,
-        booked_source_id: rest.bookedSourceId,
-        is_uploaded: rest.isUploaded,
-        uploaded_source_id: rest.uploadedSourceId,
-        booked_price_right_mosul: rest.bookedPriceRightMosul,
-        booked_price_left_mosul: rest.bookedPriceLeftMosul,
-        booked_price_others: rest.bookedPriceOthers,
-        booked_price_hammam_alalil: rest.bookedPriceHammamAlAlil,
-        booked_price_alshoura: rest.bookedPriceAlShoura,
-        booked_price_baaj: rest.bookedPriceBaaj,
-        created_at: new Date(createdAt).toISOString(),
-      };
-
-      const { error } = await supabase.from('reviewers').upsert(dbReviewer);
-      if (error) throw error;
-
-      // Handle members: delete old, insert new
-      await supabase.from('family_members').delete().eq('reviewer_id', reviewer.id);
-      if (familyMembers.length > 0) {
-        const dbMembers = familyMembers.map(m => ({
-          id: m.id,
-          reviewer_id: reviewer.id,
-          full_name: m.fullName,
-          relationship: m.relationship,
-          surname: m.surname,
-          mother_name: m.motherName,
-          dob: m.dob
-        }));
-        await supabase.from('family_members').insert(dbMembers);
-      }
-      
-      showToast('تم حفظ السجل بنجاح', 'success');
-      fetchAllData(true);
-      if(editingReviewer) setEditingReviewer(null);
-      setCurrentView('ALL');
-    } catch (e: any) {
-      throw e;
-    }
-  };
-
-  const onSaveOfficeRecord = async (record: OfficeRecord) => {
-    try {
-        const { familyMembers, createdAt, ...rest } = record;
-        const dbRecord = {
-            id: record.id,
-            circle_type: record.circleType,
-            head_full_name: record.headFullName,
-            head_surname: record.headSurname,
-            head_mother_name: record.headMotherName,
-            head_dob: record.headDob,
-            head_phone: record.headPhone,
-            affiliation: record.affiliation,
-            table_number: record.tableNumber,
-            booking_image: record.bookingImage,
-            booking_date: record.bookingDate,
-            booking_created_at: record.bookingCreatedAt ? new Date(record.bookingCreatedAt).toISOString() : null,
-            is_booked: record.isBooked,
-            is_archived: record.isArchived,
-            booked_source_id: record.bookedSourceId,
-            is_uploaded: record.isUploaded,
-            uploaded_source_id: record.uploadedSourceId,
-            booked_price_right_mosul: record.bookedPriceRightMosul,
-            booked_price_left_mosul: record.bookedPriceLeftMosul,
-            booked_price_others: record.bookedPriceOthers,
-            booked_price_hammam_alalil: record.bookedPriceHammamAlAlil,
-            booked_price_alshoura: record.bookedPriceAlShoura,
-            booked_price_baaj: record.bookedPriceBaaj,
-            created_at: new Date(record.createdAt).toISOString()
-        };
-
-        const { error } = await supabase.from('office_records').upsert(dbRecord);
-        if (error) throw error;
-
-        await supabase.from('office_family_members').delete().eq('office_record_id', record.id);
-        if (familyMembers.length > 0) {
-            const dbMembers = familyMembers.map(m => ({
-                id: m.id,
-                office_record_id: record.id,
-                full_name: m.fullName,
-                relationship: m.relationship,
-                surname: m.surname,
-                mother_name: m.motherName,
-                dob: m.dob
-            }));
-            await supabase.from('office_family_members').insert(dbMembers);
-        }
-
-        showToast('تم حفظ سجل المكتب بنجاح', 'success');
-        fetchAllData(true);
-        if(editingOffice) setEditingOffice(null);
-        if (isAdmin) setCurrentView('OFFICE_ALL');
-    } catch (e: any) {
-        // Log the actual error to understand why it failed
-        console.error("Failed to save office record:", e);
-        throw e;
-    }
-  };
-
-  const onDeleteReviewer = async (id: string) => {
-    try {
-        const reviewer = reviewers.find(r => r.id === id);
-        if (reviewer) {
-            await supabase.from('recycle_bin').insert({
-                original_id: reviewer.id,
-                record_type: 'reviewer',
-                full_name: reviewer.headFullName,
-                deleted_by: loggedInUser?.username || 'Unknown',
-                original_data: reviewer
-            });
-        }
-        await supabase.from('reviewers').delete().eq('id', id);
-        showToast('تم حذف السجل', 'success');
-        fetchAllData(true);
-    } catch (e: any) {
-        showToast(`فشل الحذف: ${e.message}`, 'error');
-    }
-  };
-
-  const onDeleteOfficeRecord = async (id: string) => {
-    try {
-        const record = officeRecords.find(r => r.id === id);
-        if (record) {
-            await supabase.from('recycle_bin').insert({
-                original_id: record.id,
-                record_type: 'office',
-                full_name: record.headFullName,
-                deleted_by: loggedInUser?.username || 'Unknown',
-                original_data: record
-            });
-        }
-        await supabase.from('office_records').delete().eq('id', id);
-        showToast('تم حذف سجل المكتب', 'success');
-        fetchAllData(true);
-    } catch (e: any) {
-        showToast(`فشل الحذف: ${e.message}`, 'error');
-    }
-  };
-
-  const onDeleteMember = async (recordId: string, memberId: string) => {
-    // Check if reviewer or office record
-    const isReviewer = reviewers.some(r => r.id === recordId);
-    const table = isReviewer ? 'family_members' : 'office_family_members';
-    try {
-        await supabase.from(table).delete().eq('id', memberId);
-        showToast('تم حذف الفرد', 'success');
-        fetchAllData(true);
-    } catch (e: any) {
-        showToast(`فشل حذف الفرد: ${e.message}`, 'error');
-    }
-  };
-
-  const onToggleUploadStatus = async (id: string, currentState: boolean, currentSourceId: string | null) => {
-    const isReviewer = reviewers.some(r => r.id === id);
-    const table = isReviewer ? 'reviewers' : 'office_records';
-    const newStatus = !currentState;
-    
-    try {
-        await supabase.from(table).update({ 
-            is_uploaded: newStatus,
-            uploaded_source_id: newStatus ? currentSourceId : null // If un-uploading, clear source? Or keep it? Usually clear or keep based on requirement. Let's assume toggle OFF clears it.
-        }).eq('id', id);
-        
-        showToast(newStatus ? 'تم تغيير الحالة إلى مرفوع' : 'تم إلغاء حالة الرفع', 'success');
-        fetchAllData(true);
-    } catch (e: any) {
-        showToast(`فشل التحديث: ${e.message}`, 'error');
-    }
-  };
-
-  const onUploadAndBook = async (id: string, imageData: string, type: 'reviewer' | 'office', bookingDate?: string) => {
-    // Use provided bookingDate or fallback to today
-    const dateToUse = bookingDate || new Date().toLocaleDateString('en-CA');
-    await handleToggleBooking(type, id, false, null, imageData, dateToUse);
-  };
-
-  const handleSettleOffice = async (officeId: string, amount: number, notes: string) => {
-    try {
-        await supabase.from('office_settlements').insert({
-            office_id: officeId,
-            amount,
-            notes,
-            recorded_by: loggedInUser?.username
-        });
-        showToast('تم تسجيل الدفعة بنجاح', 'success');
-        fetchAllData(true);
-    } catch (e: any) {
-        showToast(`فشل التسجيل: ${e.message}`, 'error');
-    }
-  };
-
-  const handleSettleSource = async (sourceId: string, amount: number, notes?: string) => {
-    try {
-        await supabase.from('settlement_transactions').insert({
-            source_id: sourceId,
-            amount,
-            notes,
-            recorded_by: loggedInUser?.username
-        });
-        showToast('تم تسجيل التسديد للمصدر', 'success');
-        fetchAllData(true);
-    } catch (e: any) {
-        showToast(`فشل التسديد: ${e.message}`, 'error');
-    }
-  };
-
-  const onBulkToggleUploadStatus = async (ids: string[], status: boolean, sourceId?: string | null) => {
-    try {
-        // Try update both tables
-        await supabase.from('reviewers').update({ is_uploaded: status, uploaded_source_id: sourceId || null }).in('id', ids);
-        await supabase.from('office_records').update({ is_uploaded: status, uploaded_source_id: sourceId || null }).in('id', ids);
-        showToast(`تم تحديث ${ids.length} سجل`, 'success');
-        fetchAllData(true);
-    } catch (e: any) {
-        showToast(`فشل التحديث الجماعي: ${e.message}`, 'error');
-    }
-  };
-
-  const onBulkDelete = async (ids: string[]) => {
-    try {
-        // Move to trash logic for bulk? Skipping for brevity, direct delete
-        await supabase.from('reviewers').delete().in('id', ids);
-        await supabase.from('office_records').delete().in('id', ids);
-        showToast(`تم حذف ${ids.length} سجل`, 'success');
-        fetchAllData(true);
-    } catch (e: any) {
-        showToast(`فشل الحذف الجماعي: ${e.message}`, 'error');
-    }
-  };
-
-  const handleRestoreFromTrash = async (item: RecycleBinItem) => {
-      try {
-          const table = item.record_type === 'reviewer' ? 'reviewers' : 'office_records';
-          const { original_data } = item;
-          // Clean data before insert
-          const { familyMembers, ...rest } = original_data;
-          
-          // Must match DB columns (snake_case conversion needed if original_data is camelCase)
-          // Assuming original_data stored in RecycleBin matches DB structure or needs mapping.
-          // Let's assume it might need mapping if it came from frontend state.
-          
-          // Quick mapping helper
-          const mapToDb = (d: any) => ({
-             id: d.id,
-             circle_type: d.circleType || d.circle_type,
-             head_full_name: d.headFullName || d.head_full_name,
-             head_surname: d.headSurname || d.head_surname,
-             head_mother_name: d.headMotherName || d.head_mother_name,
-             head_dob: d.headDob || d.head_dob,
-             head_phone: d.headPhone || d.head_phone,
-             affiliation: d.affiliation,
-             // ... map other fields as needed
-             created_at: new Date().toISOString() // Reset creation time or keep original?
-          });
-
-          await supabase.from(table).upsert(mapToDb(rest));
-          
-          // Restore members...
-          // Delete from recycle bin
-          await supabase.from('recycle_bin').delete().eq('id', item.id);
-          
-          showToast('تم استرجاع السجل', 'success');
-          fetchAllData(true);
-      } catch (e: any) {
-          showToast(`فشل الاسترجاع: ${e.message}`, 'error');
-      }
-  };
-
   if (!loggedInUser) return <LoginScreen onLogin={handleLogin} errorMessage={loginError} isLoading={isLoading} />;
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 font-cairo text-right" dir="rtl">
       <Navbar 
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} 
-        onRefresh={() => fetchAllData()} 
+        onRefresh={() => fetchAllData(true)} 
         isSyncing={isSyncing} 
         loggedInUser={loggedInUser}
         onLogout={handleLogout}
         allOfficeUsers={allOfficeUsers}
+        onNotificationsClick={() => onNavigate('USER_ACTIVITY')}
       />
       
       <div className="flex flex-1 relative overflow-hidden">
@@ -1069,8 +1101,8 @@ const App: React.FC = () => {
                   officeRecords={officeRecords} 
                   bookingSources={bookingSources}
                   onGoBack={onGoBack} 
-                  onUnarchive={(type, id) => supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').update({ is_archived: false }).eq('id', id).then(() => { showToast('تم استرجاع السجل', 'success'); fetchAllData(true); })}
-                  onDelete={(type, id) => supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').delete().eq('id', id).then(() => { showToast('تم الحذف النهائي', 'success'); fetchAllData(true); })}
+                  onUnarchive={async (type, id) => { await supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').update({ is_archived: false }).eq('id', id); showToast('تم استرجاع السجل', 'success'); await fetchAllData(true); }}
+                  onDelete={async (type, id) => { await supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').delete().eq('id', id); showToast('تم الحذف النهائي', 'success'); await fetchAllData(true); }}
                   loggedInUser={loggedInUser}
                   formatCurrency={formatCurrency}
                 />
@@ -1082,7 +1114,7 @@ const App: React.FC = () => {
                   onGoBack={onGoBack} 
                   onUnbook={(type, id) => handleToggleBooking(type, id, true, null)} // Reverse booking
                   onDelete={(type, id) => onDeleteReviewer(id)} // Generalized delete
-                  onArchive={(type, id) => supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').update({ is_archived: true }).eq('id', id).then(() => { showToast('تمت الأرشفة', 'success'); fetchAllData(true); })}
+                  onArchive={async (type, id) => { await supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').update({ is_archived: true }).eq('id', id); showToast('تمت الأرشفة', 'success'); await fetchAllData(true); }}
                   loggedInUser={loggedInUser}
                 />
             ) : currentView === 'SETTINGS' ? (

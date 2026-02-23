@@ -62,7 +62,7 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
         });
         setTrashReceipts(recovered);
       } catch (e: any) {
-        console.error("Error fetching trash receipts", e);
+        console.error("Error fetching trash receipts", String(e));
       } finally {
         setIsLoadingTrash(false);
       }
@@ -195,16 +195,18 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
       setIsProcessing(true);
 
       try {
-        if (navigator.share) {
-            const filesArray = await Promise.all(
-                selectedRecords.map(r => 
-                    dataURLtoFile(r.bookingImage!, `وصل_${r.headFullName.replace(/\s/g, '_')}.png`)
+        // Cast navigator to any to avoid TypeScript errors with 'share' property if it's missing from types
+        const nav = navigator as any;
+        if (nav.share) {
+            const filesArray: File[] = await Promise.all(
+                selectedRecords.map((r: OfficeRecord) => 
+                    dataURLtoFile(r.bookingImage || '', `وصل_${r.headFullName.replace(/\s/g, '_')}.png`)
                 )
             );
 
             // Check if data is valid for sharing
-            if (navigator.canShare && navigator.canShare({ files: filesArray })) {
-                await navigator.share({
+            if (nav.canShare && nav.canShare({ files: filesArray })) {
+                await nav.share({
                     files: filesArray,
                     title: 'صور الحجوزات',
                     text: `تم إرفاق ${filesArray.length} وصل حجز.`
@@ -218,21 +220,19 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
         }
       } catch (err: any) {
         // Handle AbortError (User cancelled share sheet) gracefully
-        const errorName = err?.name;
-        // Ensure errorMessage is captured, falling back to stringifying err if message doesn't exist
-        const errorMessage = err?.message || String(err);
+        const error = err as any;
+        const errorName = error?.name;
+        const errorMessage = error?.message;
         
-        const isCancelled = 
-            errorName === 'AbortError' || 
-            (typeof errorMessage === 'string' && (errorMessage.toLowerCase().includes('canceled') || errorMessage.toLowerCase().includes('cancelled')));
+        const isCancelled = errorName === 'AbortError' || 
+            (typeof errorMessage === 'string' && (errorMessage.toLowerCase().includes('cancel') || errorMessage.toLowerCase().includes('abort')));
 
         if (isCancelled) {
             console.log('User cancelled sharing');
-            // Do not show an alert for cancellation
         } else {
             console.error("Error sharing files:", err);
-            // Explicitly cast to string to avoid type errors
-            alert(`حدث خطأ أثناء محاولة المشاركة: ${String(errorMessage)}`);
+            const msg = typeof errorMessage === 'string' ? errorMessage : 'Unknown error';
+            alert(`حدث خطأ أثناء محاولة المشاركة: ${msg}`);
         }
       } finally {
         setIsProcessing(false);
@@ -252,7 +252,7 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
         await onDeleteReceipt(recordToDelete.id);
         setRecordToDelete(null);
     } catch (e: any) {
-        console.error(e);
+        console.error(String(e));
     } finally {
         setIsProcessing(false);
     }
@@ -274,7 +274,7 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
             }
             setSelectedIds(new Set());
         } catch (e: any) {
-            console.error(e);
+            console.error(String(e));
         } finally {
             setIsProcessing(false);
         }

@@ -195,8 +195,8 @@ const BackupManager: React.FC<BackupManagerProps> = ({
 
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-scale-up pb-40">
-      <div className="bg-white p-8 rounded-[3rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden">
+    <div className="max-w-7xl mx-auto space-y-8 animate-scale-up pb-40">
+      <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border-2 border-slate-900 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 z-10 p-2">
           <button 
             onClick={onGoBack}

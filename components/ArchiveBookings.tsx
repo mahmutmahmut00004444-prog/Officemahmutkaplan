@@ -226,7 +226,7 @@ export default function ArchiveBookings({ reviewers, officeRecords, bookingSourc
 
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-6">
                  <p className="text-[10px] font-black text-slate-400 mb-1">الملاحظات</p>
-                 <p className="text-xs font-bold text-slate-600 leading-relaxed">{viewingRecord.notes || 'لا توجد ملاحظات'}</p>
+                 <p className="text-xs font-bold text-slate-600 leading-relaxed">{('notes' in viewingRecord) ? (viewingRecord as Reviewer).notes : 'لا توجد ملاحظات'}</p>
               </div>
             </div>
 
@@ -316,7 +316,7 @@ export default function ArchiveBookings({ reviewers, officeRecords, bookingSourc
                     const familyCount = 1 + (r.familyMembers?.length || 0);
                     const priceDisplay = getRecordPrice(r);
                     const sourceName = r.bookedSourceId ? bookingSourcesMap.get(r.bookedSourceId) : 'يدوي';
-                    const notes = 'notes' in r ? r.notes : '-';
+                    const notes = 'notes' in r ? (r as Reviewer).notes : '-';
 
                     return (
                       <tr key={r.id} onClick={() => handleRowClick(r)} className="border-b border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors">

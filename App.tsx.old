@@ -1,35 +1,35 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { CircleType, ViewType, Reviewer, OfficeRecord, CIRCLE_NAMES, LoggedInUser, UserRole, OfficeUser, BookingSource, ViewHistoryEntry, OfficeSettlement, SourceStatementTab, SettlementTransaction, SessionStats, RecycleBinItem } from '../types';
-import ReviewerForm from './ReviewerForm';
-import OfficeForm from './OfficeForm';
-import SmartReader from './SmartReader';
-import Sidebar from './Sidebar';
-import Navbar from './Navbar';
-import BackupManager from './BackupManager';
-import ReviewerTable from './ReviewerTable';
-import OfficeTable from './OfficeTable';
-import LoginScreen from './LoginScreen';
-import ManageOffices from './ManageOffices';
-import BookingAlbum from './BookingAlbum';
-import ArchiveBookings from './ArchiveBookings';
-import CompletedBookings from './CompletedBookings';
-import SettingsPage from './SettingsPage';
-import OfficeStatement from './OfficeStatement';
-import SettleOfficePage from './SettleOfficePage';
-import AccountsBlog from './AccountsBlog';
-import BookingSourcesManager from './BookingSourcesManager';
-import SourceAccountStatementModal from './SourceAccountStatementModal';
-import AddBookingToSourcePage from './AddBookingToSourcePage';
-import SettleSourcePage from './SettleSourcePage';
-import SessionsManager from './SessionsManager';
-import OfficeSmartListImporter from './OfficeSmartListImporter'; 
-import TrashBin from './TrashBin'; 
-import UserActivityLog from './UserActivityLog'; 
-import UpdatePrompt from './UpdatePrompt';
-import OfficeReceipts from './OfficeReceipts'; 
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { formatCurrency } from '../lib/formatCurrency';
+import { CircleType, ViewType, Reviewer, OfficeRecord, CIRCLE_NAMES, LoggedInUser, UserRole, OfficeUser, BookingSource, ViewHistoryEntry, OfficeSettlement, SourceStatementTab, SettlementTransaction, SessionStats, RecycleBinItem } from './types';
+import ReviewerForm from './components/ReviewerForm';
+import OfficeForm from './components/OfficeForm';
+import SmartReader from './components/SmartReader';
+import Sidebar from './components/Sidebar';
+import Navbar from './components/Navbar';
+import BackupManager from './components/BackupManager';
+import ReviewerTable from './components/ReviewerTable';
+import OfficeTable from './components/OfficeTable';
+import LoginScreen from './components/LoginScreen';
+import ManageOffices from './components/ManageOffices';
+import BookingAlbum from './components/BookingAlbum';
+import ArchiveBookings from './components/ArchiveBookings';
+import CompletedBookings from './components/CompletedBookings';
+import SettingsPage from './components/SettingsPage';
+import OfficeStatement from './components/OfficeStatement';
+import SettleOfficePage from './components/SettleOfficePage';
+import AccountsBlog from './components/AccountsBlog';
+import BookingSourcesManager from './components/BookingSourcesManager';
+import SourceAccountStatementModal from './components/SourceAccountStatementModal';
+import AddBookingToSourcePage from './components/AddBookingToSourcePage';
+import SettleSourcePage from './components/SettleSourcePage';
+import SessionsManager from './components/SessionsManager';
+import OfficeSmartListImporter from './components/OfficeSmartListImporter'; 
+import TrashBin from './components/TrashBin'; 
+import UserActivityLog from './components/UserActivityLog'; 
+import UpdatePrompt from './components/UpdatePrompt';
+import OfficeReceipts from './components/OfficeReceipts'; 
+import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { formatCurrency } from './lib/formatCurrency';
 import { GoogleGenAI } from '@google/genai';
 
 const ADMIN_USERNAME = "محمود قبلان";
@@ -809,7 +809,7 @@ const App: React.FC = () => {
     try {
         await supabase.from(table).update({ 
             is_uploaded: newStatus,
-            uploaded_source_id: newStatus ? currentSourceId : null // If un-uploading, clear source? Or keep it? Usually clear or keep based on requirement. Let's assume toggle OFF clears it.
+            uploaded_source_id: newStatus ? currentSourceId : null 
         }).eq('id', id);
         
         showToast(newStatus ? 'تم تغيير الحالة إلى مرفوع' : 'تم إلغاء حالة الرفع', 'success');
@@ -886,11 +886,6 @@ const App: React.FC = () => {
           // Clean data before insert
           const { familyMembers, ...rest } = original_data;
           
-          // Must match DB columns (snake_case conversion needed if original_data is camelCase)
-          // Assuming original_data stored in RecycleBin matches DB structure or needs mapping.
-          // Let's assume it might need mapping if it came from frontend state.
-          
-          // Quick mapping helper
           const mapToDb = (d: any) => ({
              id: d.id,
              circle_type: d.circleType || d.circle_type,
@@ -901,7 +896,7 @@ const App: React.FC = () => {
              head_phone: d.headPhone || d.head_phone,
              affiliation: d.affiliation,
              // ... map other fields as needed
-             created_at: new Date().toISOString() // Reset creation time or keep original?
+             created_at: new Date().toISOString() 
           });
 
           await supabase.from(table).upsert(mapToDb(rest));
@@ -928,6 +923,7 @@ const App: React.FC = () => {
         loggedInUser={loggedInUser}
         onLogout={handleLogout}
         allOfficeUsers={allOfficeUsers}
+        onNotificationsClick={() => onNavigate('USER_ACTIVITY')}
       />
       
       <div className="flex flex-1 relative overflow-hidden">
@@ -1056,8 +1052,8 @@ const App: React.FC = () => {
                   officeRecords={officeRecords} 
                   bookingSources={bookingSources}
                   onGoBack={onGoBack} 
-                  onUnarchive={(type, id) => supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').update({ is_archived: false }).eq('id', id).then(() => { showToast('تم استرجاع السجل', 'success'); fetchAllData(true); })}
-                  onDelete={(type, id) => supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').delete().eq('id', id).then(() => { showToast('تم الحذف النهائي', 'success'); fetchAllData(true); })}
+                  onUnarchive={async (type, id) => { await supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').update({ is_archived: false }).eq('id', id); showToast('تم استرجاع السجل', 'success'); await fetchAllData(true); }}
+                  onDelete={async (type, id) => { await supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').delete().eq('id', id); showToast('تم الحذف النهائي', 'success'); await fetchAllData(true); }}
                   loggedInUser={loggedInUser}
                   formatCurrency={formatCurrency}
                 />
@@ -1069,7 +1065,7 @@ const App: React.FC = () => {
                   onGoBack={onGoBack} 
                   onUnbook={(type, id) => handleToggleBooking(type, id, true, null)} // Reverse booking
                   onDelete={(type, id) => onDeleteReviewer(id)} // Generalized delete
-                  onArchive={(type, id) => supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').update({ is_archived: true }).eq('id', id).then(() => { showToast('تمت الأرشفة', 'success'); fetchAllData(true); })}
+                  onArchive={async (type, id) => { await supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').update({ is_archived: true }).eq('id', id); showToast('تمت الأرشفة', 'success'); await fetchAllData(true); }}
                   loggedInUser={loggedInUser}
                 />
             ) : currentView === 'SETTINGS' ? (
