@@ -114,6 +114,30 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
   const preventClickRef = useRef(false); // لمنع النقر العادي بعد نجاح الضغط المطول
   const isSelectionMode = selectedIds.size > 0;
 
+  const copyToClipboard = (text: string) => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('تم نسخ النص بنجاح', 'success');
+      }).catch(err => {
+        console.error('Failed to copy: ', err);
+        showToast('فشل نسخ النص', 'error');
+      });
+    } else {
+      // Fallback
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        showToast('تم نسخ النص بنجاح', 'success');
+      } catch (err) {
+        showToast('فشل نسخ النص', 'error');
+      }
+      document.body.removeChild(textArea);
+    }
+  };
+
   const isAdmin = loggedInUser?.role === 'ADMIN';
   const isOfficeUser = loggedInUser?.role === 'OFFICE';
   const permissionDeniedMessage = 'لا يمكنك إجراء تعديل البيانات او حذفها بسبب تم رفع البيانات او تم الحجز بنجاح تواصل مع محمود قبلان.';
@@ -495,6 +519,20 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
       if (isAdmin) {
         items.push(
           { 
+            label: '📋 نسخ بيانات السجل', 
+            onClick: () => {
+              let text = `الاسم: ${r.headFullName}\nالأم: ${r.headMotherName}\nالصلة: رئيس`;
+              if (r.familyMembers && r.familyMembers.length > 0) {
+                text += `\n--------------------------`;
+                r.familyMembers.forEach(m => {
+                  text += `\nالاسم: ${m.fullName}\nالأم: ${m.motherName || r.headMotherName || '-'}\nالصلة: ${m.relationship}\n--------------------------`;
+                });
+              }
+              copyToClipboard(text);
+            }
+          },
+          { isSeparator: true },
+          { 
             label: r.isUploaded ? '🟣 إلغاء حالة الرفع' : '🟣 تمييز كمرفوع بنجاح', 
             onClick: () => {
               if (!r.isUploaded) {
@@ -537,6 +575,14 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
       const parent = currentContextMenuData.parentRecord!;
       const isLocked = isOfficeUser && (parent.isBooked || parent.isUploaded);
       return [
+        { 
+          label: '📋 نسخ بيانات الفرد', 
+          onClick: () => {
+            const text = `الاسم: ${m.fullName}\nالأم: ${m.motherName || parent.headMotherName || '-'}\nالصلة: ${m.relationship}`;
+            copyToClipboard(text);
+          }
+        },
+        { isSeparator: true },
         { label: 'حذف هذا الفرد', onClick: () => setDeleteConfirm({ id: m.id, name: m.fullName, type: 'member', parentId: parent.id }), isDestructive: true, disabled: isLocked, tooltip: isLocked ? permissionDeniedMessage : undefined }
       ];
     }
@@ -812,7 +858,15 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 items-center">
-          <input type="text" placeholder="بحث بالاسم الكامل..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full h-9 px-4 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-black outline-none" />
+          <input 
+            type="text" 
+            placeholder="بحث بالاسم الكامل..." 
+            value={searchQuery} 
+            onChange={e => setSearchQuery(e.target.value)} 
+            className="w-full h-9 px-4 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-black outline-none" 
+            lang="ar"
+            inputMode="text"
+          />
           <select value={selectedOffice} onChange={e => setSelectedOffice(e.target.value)} className="h-9 px-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none cursor-pointer" disabled={isOfficeUser && uniqueOffices.length === 1}><option value="ALL">جميع المكاتب</option>{uniqueOffices.map(office => <option key={office} value={office}>{office}</option>)}</select>
           <select value={selectedCircle} onChange={e => setSelectedCircle(e.target.value)} className="h-9 px-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none"><option value="ALL">جميع الدوائر</option>{Object.values(CircleType).map(t => <option key={t} value={t}>{CIRCLE_NAMES[t]}</option>)}</select>
           <select value={familyCountFilter} onChange={e => setFamilyCountFilter(e.target.value)} className="h-9 px-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none">
@@ -869,7 +923,7 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
               {isAdmin && <th className="w-24">جهة الرفع</th>}
               <th className="w-24">سعر الحجز</th>
               <th className="w-32">تاريخ تقييد الاسم</th>
-              <th className="w-24">تاريخ الحجز</th>
+              <th className="w-32">تاريخ الحجز</th>
               <th className="w-32">صورة الحجز</th>
             </tr>
           </thead>
@@ -883,15 +937,15 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
               const uploadedSource = bookingSourcesMap.get(r.uploadedSourceId || '') || '-';
               const bookedSource = bookingSourcesMap.get(r.bookedSourceId || '') || (isActuallyBooked ? 'يدوي' : '-');
 
-              let rowClasses = `bg-white cursor-pointer transition-colors select-none border-b border-slate-200`;
+              let rowClasses = `bg-white cursor-pointer transition-colors border-b border-slate-200`;
               if (isSelected) {
-                rowClasses = `bg-indigo-50 outline outline-2 outline-indigo-600 -outline-offset-2 select-none cursor-pointer border-b border-indigo-200`;
+                rowClasses = `bg-indigo-50 outline outline-2 outline-indigo-600 -outline-offset-2 cursor-pointer border-b border-indigo-200`;
               } else if (isActuallyBooked) {
-                rowClasses = `has-booking cursor-pointer transition-colors select-none border-b border-green-200`;
+                rowClasses = `has-booking cursor-pointer transition-colors border-b border-green-200`;
               } else if (isUploaded) {
-                rowClasses = `bg-fuchsia-100 cursor-pointer transition-colors select-none border-b border-fuchsia-200`;
+                rowClasses = `bg-fuchsia-100 cursor-pointer transition-colors border-b border-fuchsia-200`;
               } else if (isDuplicate) {
-                rowClasses = `bg-red-100 cursor-pointer transition-colors select-none border-b border-red-200`;
+                rowClasses = `bg-red-100 cursor-pointer transition-colors border-b border-red-200`;
               }
 
               const textClass = isSelected ? 'text-black' : 'text-slate-900';
@@ -918,7 +972,20 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
                         ) : idx + 1}
                     </td>
                     <td className={`font-black text-[9px] ${isSelected ? 'text-black' : 'text-slate-600'}`}>{CIRCLE_NAMES[r.circleType]}</td>
-                    <td className={`text-right font-black px-2 text-[11px] truncate max-w-[130px] ${isDuplicate && !isSelected ? 'text-red-700 underline decoration-wavy decoration-red-600' : 'text-slate-950'} ${textClass}`}>{r.headFullName}</td>
+                    <td className={`text-right font-black px-2 text-[11px] truncate max-w-[130px] ${isDuplicate && !isSelected ? 'text-red-700 underline decoration-wavy decoration-red-600' : 'text-slate-950'} ${textClass}`}>
+                      <span 
+                        className="cursor-text select-text" 
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          // Allow double click to select word, etc.
+                          // But we don't want to completely block context menu if they just click.
+                          // However, the user specifically asked for selection.
+                        }}
+                      >
+                        {r.headFullName}
+                      </span>
+                    </td>
                     <td className={`font-black text-[10px] text-slate-950 ${textClass}`}>{r.headSurname || '—'}</td>
                     <td className={`text-right font-black px-2 text-[10px] truncate max-w-[100px] text-slate-950 ${textClass}`}>{r.headMotherName}</td>
                     <td className={`text-center font-black text-[10px] text-slate-950 ${textClass}`}>{r.headDob}</td>
@@ -937,7 +1004,18 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
                     <td className="text-center text-[9px] font-bold text-slate-500" dir="ltr">
                       {new Date(r.createdAt).toLocaleString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}
                     </td>
-                    <td className={`text-center font-black text-[10px] ${isSelected ? 'text-black' : 'text-blue-700'}`}>{r.bookingDate || '—'}</td>
+                    <td className={`text-center font-black text-[10px] ${isSelected ? 'text-black' : 'text-blue-700'}`}>
+                      <div className="flex items-center justify-center gap-1">
+                        <span>{r.bookingDate || '—'}</span>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); toggleSelection(r); }}
+                          className={`p-1 rounded-md transition-all active:scale-90 ${isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                          title="تحديد السجل"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>
+                        </button>
+                      </div>
+                    </td>
                     <td className="text-center">
                         {r.bookingImage ? (
                              <button onClick={(e) => { e.stopPropagation(); setPreviewImage(r.bookingImage!); }} className="w-10 h-10 rounded-lg border border-green-600 bg-white shadow-sm overflow-hidden mx-auto"><img src={r.bookingImage} className="w-full h-full object-cover" /></button>
@@ -945,7 +1023,7 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
                     </td>
                   </tr>
                   {r.familyMembers.map(m => (
-                    <tr key={m.id} className={`${isActuallyBooked && !isSelected ? 'bg-green-50' : ''} ${isUploaded && !isSelected ? 'bg-fuchsia-50' : ''} ${isDuplicate && !isSelected ? 'bg-red-50' : ''} ${isSelected ? 'bg-indigo-50' : ''} border-b border-slate-50 text-[10px] cursor-pointer select-none`} onClick={(e) => handleContextMenuClick(e, m, 'member', r)} onContextMenu={(e) => handleContextMenuClick(e, m, 'member', r)}>
+                    <tr key={m.id} className={`${isActuallyBooked && !isSelected ? 'bg-green-50' : ''} ${isUploaded && !isSelected ? 'bg-fuchsia-50' : ''} ${isDuplicate && !isSelected ? 'bg-red-50' : ''} ${isSelected ? 'bg-indigo-50' : ''} border-b border-slate-50 text-[10px] cursor-pointer`} onClick={(e) => handleContextMenuClick(e, m, 'member', r)} onContextMenu={(e) => handleContextMenuClick(e, m, 'member', r)}>
                       <td colSpan={2}></td>
                       <td className={`text-right font-black px-2 pr-6 ${isSelected ? 'text-black' : 'text-slate-700'}`}>{m.fullName}</td>
                       <td className={`font-black ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.surname || r.headSurname || '—'}</td>

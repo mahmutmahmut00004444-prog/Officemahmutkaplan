@@ -110,6 +110,30 @@ export default function ReviewerTable({
   const preventClickRef = useRef(false); 
   const isSelectionMode = selectedIds.size > 0;
 
+  const copyToClipboard = (text: string) => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('تم نسخ النص بنجاح', 'success');
+      }).catch(err => {
+        console.error('Failed to copy: ', err);
+        showToast('فشل نسخ النص', 'error');
+      });
+    } else {
+      // Fallback
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        showToast('تم نسخ النص بنجاح', 'success');
+      } catch (err) {
+        showToast('فشل نسخ النص', 'error');
+      }
+      document.body.removeChild(textArea);
+    }
+  };
+
   const isAdmin = loggedInUser?.role === 'ADMIN';
 
   const bookingSourcesMap = useMemo(() => new Map(bookingSources.map(s => [s.id, s.sourceName])), [bookingSources]);
@@ -448,6 +472,20 @@ export default function ReviewerTable({
       const r = currentContextMenuData.record!;
       const items: ContextMenuItem[] = [
         { 
+          label: '📋 نسخ بيانات السجل', 
+          onClick: () => {
+            let text = `الاسم: ${r.headFullName}\nالأم: ${r.headMotherName}\nالصلة: رئيس`;
+            if (r.familyMembers && r.familyMembers.length > 0) {
+              text += `\n--------------------------`;
+              r.familyMembers.forEach(m => {
+                text += `\nالاسم: ${m.fullName}\nالأم: ${m.motherName || r.headMotherName || '-'}\nالصلة: ${m.relationship}\n--------------------------`;
+              });
+            }
+            copyToClipboard(text);
+          }
+        },
+        { isSeparator: true },
+        { 
           label: r.isUploaded ? '🟣 إلغاء حالة الرفع' : '🟣 تمييز كمرفوع بنجاح', 
           onClick: () => {
             if (!r.isUploaded) {
@@ -478,6 +516,14 @@ export default function ReviewerTable({
       const m = currentContextMenuData.member!;
       const parent = currentContextMenuData.parentRecord!;
       return [
+        { 
+          label: '📋 نسخ بيانات الفرد', 
+          onClick: () => {
+            const text = `الاسم: ${m.fullName}\nالأم: ${m.motherName || parent.headMotherName || '-'}\nالصلة: ${m.relationship}`;
+            copyToClipboard(text);
+          }
+        },
+        { isSeparator: true },
         { label: 'حذف هذا الفرد', onClick: () => setDeleteConfirm({ id: m.id, name: m.fullName, type: 'member', parentId: parent.id }), isDestructive: true }
       ];
     }
@@ -763,7 +809,15 @@ export default function ReviewerTable({
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 items-center">
-          <input type="text" placeholder="بحث بالاسم الكامل..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full h-9 px-4 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-black outline-none" />
+          <input 
+            type="text" 
+            placeholder="بحث بالاسم الكامل..." 
+            value={searchQuery} 
+            onChange={e => setSearchQuery(e.target.value)} 
+            className="w-full h-9 px-4 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-black outline-none" 
+            lang="ar"
+            inputMode="text"
+          />
           <select value={circleFilter} onChange={e => setCircleFilter(e.target.value)} className="h-9 px-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none cursor-pointer">
             <option value="ALL">جميع الدوائر</option>
             {Object.values(CircleType).map(t => <option key={t} value={t}>{CIRCLE_NAMES[t]}</option>)}
