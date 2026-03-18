@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { OfficeUser, ActivityLogEntry } from '../types';
-import { supabase } from '../lib/supabase';
 
 interface UserActivityLogProps {
   allOfficeUsers: OfficeUser[];
@@ -35,33 +34,19 @@ export default function UserActivityLog({ allOfficeUsers, onGoBack, showToast }:
     setIsLoadingActivities(true);
     setTableMissing(false);
     try {
-      // 1. Cleanup logs older than 72 hours
-      const threeDaysAgo = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
-      await supabase.from('activity_logs').delete().lt('created_at', threeDaysAgo);
-
-      // 2. Fetch fresh logs
-      const { data, error } = await supabase
-        .from('activity_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (error) throw error;
-
-      setActivities((data || []).map((log: any) => ({
-        id: log.id,
-        action_type: log.action_type,
-        description: log.description,
-        user_name: log.user_name,
-        created_at: log.created_at
-      })));
-
+      const storedLogs = localStorage.getItem('activity_logs');
+      if (storedLogs) {
+        let logs = JSON.parse(storedLogs);
+        
+        // 1. Cleanup logs older than 72 hours
+        const threeDaysAgo = Date.now() - 72 * 60 * 60 * 1000;
+        logs = logs.filter((log: any) => new Date(log.created_at).getTime() > threeDaysAgo);
+        
+        localStorage.setItem('activity_logs', JSON.stringify(logs));
+        setActivities(logs.slice(0, 100));
+      }
     } catch (e: any) {
       console.error("Error fetching activities", e);
-      // Check for missing table error (PostgREST code 42P01 or Supabase specific PGRST205)
-      if (e.code === '42P01' || e.code === 'PGRST205' || e.message?.includes('activity_logs')) {
-        setTableMissing(true);
-      }
     } finally {
       setIsLoadingActivities(false);
     }
@@ -69,9 +54,12 @@ export default function UserActivityLog({ allOfficeUsers, onGoBack, showToast }:
 
   const handleDeleteActivity = async (id: string) => {
     try {
-        const { error } = await supabase.from('activity_logs').delete().eq('id', id);
-        if (error) throw error;
-        setActivities(prev => prev.filter(a => a.id !== id));
+        const storedLogs = localStorage.getItem('activity_logs');
+        if (storedLogs) {
+          const logs = JSON.parse(storedLogs).filter((a: any) => a.id !== id);
+          localStorage.setItem('activity_logs', JSON.stringify(logs));
+          setActivities(logs.slice(0, 100));
+        }
         if (showToast) showToast('تم حذف الإشعار', 'success');
     } catch (e: any) {
         if (showToast) showToast(`فشل الحذف: ${e.message}`, 'error');
@@ -126,17 +114,30 @@ export default function UserActivityLog({ allOfficeUsers, onGoBack, showToast }:
     
     setProcessingLogout(userId);
     try {
-      const { error } = await supabase.from('office_users').update({ force_logout: true }).eq('id', userId);
-      if (error) throw error;
+      // In local mode, we update the local users list
+      const storedUsers = localStorage.getItem('office_users');
+      if (storedUsers) {
+        const users = JSON.parse(storedUsers).map((u: any) => 
+          u.id === userId ? { ...u, force_logout: true } : u
+        );
+        localStorage.setItem('office_users', JSON.stringify(users));
+      }
+
       if (showToast) showToast(`تم إرسال أمر إنهاء الجلسة لـ ${officeName} بنجاح`, 'success');
       
       // Log this action
       try {
-        await supabase.from('activity_logs').insert({
+        const logEntry = {
+            id: crypto.randomUUID(),
             action_type: 'LOGOUT_FORCE',
             description: `تم طرد المكتب: ${officeName}`,
-            user_name: 'المدير'
-        });
+            user_name: 'المدير',
+            created_at: new Date().toISOString()
+        };
+        const storedLogs = localStorage.getItem('activity_logs');
+        const logs = storedLogs ? JSON.parse(storedLogs) : [];
+        localStorage.setItem('activity_logs', JSON.stringify([logEntry, ...logs]));
+        
         fetchActivitiesAndCleanup(); // Refresh logs
       } catch (logError) {
         console.error("Logging failed", logError);
@@ -379,29 +380,6 @@ export default function UserActivityLog({ allOfficeUsers, onGoBack, showToast }:
                     <div className="flex flex-col items-center justify-center py-20 text-slate-400">
                         <div className="w-8 h-8 border-4 border-slate-300 border-t-blue-600 rounded-full animate-spin mb-3"></div>
                         <span className="text-xs font-bold">جاري تحميل السجل...</span>
-                    </div>
-                ) : tableMissing ? (
-                    <div className="flex flex-col items-center justify-center py-10 text-center space-y-4">
-                        <div className="text-amber-500 text-5xl mb-2">⚠️</div>
-                        <h3 className="text-lg font-black text-slate-800">الجدول غير موجود</h3>
-                        <p className="text-sm font-bold text-slate-500 max-w-md">
-                            يبدو أن جدول <code>activity_logs</code> لم يتم إنشاؤه بعد في قاعدة البيانات. 
-                            لإصلاح هذا الخطأ، يرجى تشغيل كود SQL التالي في Supabase SQL Editor:
-                        </p>
-                        <div className="bg-slate-900 text-emerald-400 p-4 rounded-xl text-left text-xs font-mono w-full max-w-lg overflow-x-auto relative" dir="ltr">
-<pre>{`CREATE TABLE IF NOT EXISTS public.activity_logs (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    action_type TEXT, 
-    description TEXT,
-    user_name TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-ALTER TABLE public.activity_logs REPLICA IDENTITY FULL;
-NOTIFY pgrst, 'reload schema';`}</pre>
-                        </div>
-                        <button onClick={() => fetchActivitiesAndCleanup()} className="px-6 py-2 bg-blue-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-blue-700 transition-all">
-                            تم التنفيذ، أعد المحاولة
-                        </button>
                     </div>
                 ) : activities.length === 0 ? (
                     <div className="text-center py-20 text-slate-400 font-bold italic">لا يوجد سجل نشاطات حديث (يتم الحذف كل 72 ساعة).</div>

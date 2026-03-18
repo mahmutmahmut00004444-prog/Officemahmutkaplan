@@ -53,7 +53,17 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onRefresh, isSyncing, 
       
       <div className="flex items-center gap-2 md:gap-3">
         
-        {/* Notification Button Removed per User Request */}
+        {/* Notification Button (Admin Only) */}
+        {loggedInUser?.role === 'ADMIN' && (
+          <button 
+            onClick={onNotificationsClick}
+            className="p-2 bg-slate-50 text-slate-600 rounded-full border border-slate-200 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 transition-all active:scale-95 relative group"
+            title="الإشعارات وسجل النشاطات"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+            <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
+          </button>
+        )}
 
         {/* Real-time Clock - Compact on mobile */}
         <div className="flex flex-col items-end text-center justify-center"> 

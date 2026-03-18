@@ -19,17 +19,6 @@ interface FamilyMemberInput extends Omit<FamilyMember, 'fullName'> {
   fatherGrandfatherName: string;
 }
 
-const generateId = () => {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-};
-
 const OfficeForm: React.FC<OfficeFormProps> = ({ onSave, onGoBack, initialData, persistentData, isEditMode = false, loggedInUser, allOfficeUsers, formatCurrency, showToast }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -172,29 +161,13 @@ const OfficeForm: React.FC<OfficeFormProps> = ({ onSave, onGoBack, initialData, 
     setIsSubmitting(true);
 
     try {
-      const finalFamily: FamilyMember[] = familyMembers.map(m => {
-        let surname = m.surname;
-        let motherName = m.motherName;
-        
-        // Auto-fill missing fields if not provided
-        if (!surname && (m.relationship === 'ابن' || m.relationship === 'ابنة' || m.relationship === 'أخ' || m.relationship === 'أخت')) {
-          surname = formData.headSurname;
-        }
-        if (!motherName && (m.relationship === 'أخ' || m.relationship === 'أخت')) {
-          motherName = formData.headMotherName;
-        }
+      const finalFamily: FamilyMember[] = familyMembers.map(m => ({
+        ...m,
+        id: m.id || `MEM-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        fullName: `${m.firstName.trim()} ${m.fatherGrandfatherName.trim()}`.trim(),
+      }));
 
-        return {
-          ...m,
-          id: m.id || generateId(),
-          fullName: `${m.firstName.trim()} ${m.fatherGrandfatherName.trim()}`.trim(),
-          surname: surname || '',
-          motherName: motherName || '',
-          relationship: m.relationship || 'فرد'
-        };
-      });
-
-      const recordId = initialData?.id || generateId();
+      const recordId = initialData?.id || `OFF-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
 
       const payload: OfficeRecord = {
         id: recordId,
@@ -219,7 +192,7 @@ const OfficeForm: React.FC<OfficeFormProps> = ({ onSave, onGoBack, initialData, 
           affiliation: finalAffiliation
         }));
         setFamilyMembers([]);
-        window.scrollTo({ top: 0, behavior: 'smooth' }); 
+        window.scrollTo({ top: 300, behavior: 'smooth' }); 
       }
     } catch (err: any) {
       console.error("Save failed:", err);
@@ -235,7 +208,7 @@ const OfficeForm: React.FC<OfficeFormProps> = ({ onSave, onGoBack, initialData, 
     if (count > familyMembers.length) {
       for (let i = familyMembers.length; i < count; i++) {
         updated.push({
-          id: generateId(),
+          id: `MEM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           relationship: '', firstName: '', fatherGrandfatherName: '', surname: '', motherName: '', dob: ''
         });
       }

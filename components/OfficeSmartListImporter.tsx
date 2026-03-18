@@ -1,8 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { GoogleGenAI } from '@google/genai';
-import { CircleType, CIRCLE_NAMES, LoggedInUser } from '../types';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { CircleType, CIRCLE_NAMES, LoggedInUser, OfficeRecord } from '../types';
 
 interface OfficeSmartListImporterProps {
   onGoBack: () => void;
@@ -203,47 +202,38 @@ export default function OfficeSmartListImporter({ onGoBack, showToast, loggedInU
 
     setIsSaving(true);
     try {
+      const currentRecords: OfficeRecord[] = JSON.parse(localStorage.getItem('office_records') || '[]');
+      const newRecords: OfficeRecord[] = [...currentRecords];
+
       // Loop through each family
       for (const head of extractedData) {
-        // 1. Insert Head
-        const headRecord = {
-          circle_type: selectedCircle,
+        const headId = crypto.randomUUID();
+        
+        const headRecord: OfficeRecord = {
+          id: headId,
+          circle_type: selectedCircle as CircleType,
           head_full_name: head.headFullName,
           head_mother_name: head.headMotherName,
           head_dob: head.headDob,
           head_surname: '', 
           head_phone: '', 
           affiliation: loggedInUser.username,
-          created_at: new Date().toISOString()
-        };
-
-        const { data: insertedHead, error: headError } = await supabase
-          .from('office_records')
-          .insert(headRecord)
-          .select()
-          .single();
-
-        if (headError) throw headError;
-
-        // 2. Insert Members if any
-        if (head.members.length > 0 && insertedHead) {
-          const membersRecords = head.members.map(m => ({
-            office_record_id: insertedHead.id,
+          created_at: new Date().toISOString(),
+          office_family_members: head.members.map(m => ({
+            id: crypto.randomUUID(),
+            office_record_id: headId,
             full_name: m.fullName,
             mother_name: m.motherName,
             dob: m.dob,
             relationship: m.relationship || 'فرد',
-            surname: '' // يمكن تحديثه لاحقاً إذا توفر
-          }));
+            surname: ''
+          }))
+        };
 
-          const { error: membersError } = await supabase
-            .from('office_family_members')
-            .insert(membersRecords);
-          
-          if (membersError) console.error("Error saving members:", membersError);
-        }
+        newRecords.push(headRecord);
       }
 
+      localStorage.setItem('office_records', JSON.stringify(newRecords));
       showToast('تم حفظ جميع العوائل والأفراد بنجاح!', 'success');
       onSuccess();
     } catch (error: any) {

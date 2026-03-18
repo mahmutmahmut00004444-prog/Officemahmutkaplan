@@ -2,7 +2,6 @@
 import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { BookingSource, Reviewer, OfficeRecord, CIRCLE_NAMES, CircleType, SettlementTransaction } from '../types';
 import { SourceStatementTab } from '../types';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface SourceAccountStatementModalProps {
   isOpen: boolean;
@@ -14,16 +13,16 @@ interface SourceAccountStatementModalProps {
   onRemoveBookingFromSource: (recordId: string, sourceId: string | null, recordType: 'reviewer' | 'office') => Promise<void>; 
   showToast: (message: string, type: 'success' | 'error') => void; 
   formatCurrency: (amount: number | string | undefined) => string; 
+  settlementTransactions: SettlementTransaction[];
 }
 
 const SourceAccountStatementModal: React.FC<SourceAccountStatementModalProps> = ({
-  isOpen, onClose, source, allReviewers, allOfficeRecords, defaultTab = 'summary', onRemoveBookingFromSource, showToast, formatCurrency,
+  isOpen, onClose, source, allReviewers, allOfficeRecords, defaultTab = 'summary', onRemoveBookingFromSource, showToast, formatCurrency, settlementTransactions,
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<SourceStatementTab>(defaultTab);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); 
   const [recordToDelete, setRecordToDelete] = useState<{ id: string, name: string, type: 'reviewer' | 'office' } | null>(null); 
-  const [settlementTransactions, setSettlementTransactions] = useState<SettlementTransaction[]>([]); 
 
   useEffect(() => { setActiveTab(defaultTab); }, [defaultTab]);
 
@@ -38,20 +37,6 @@ const SourceAccountStatementModal: React.FC<SourceAccountStatementModalProps> = 
     }
     return () => { document.removeEventListener('keydown', handleEscape); document.body.classList.remove('overflow-hidden'); };
   }, [isOpen, onClose]);
-
-  useEffect(() => {
-    const fetchSettlements = async () => {
-      if (!isSupabaseConfigured) return;
-      try {
-        const { data, error } = await supabase.from('settlement_transactions').select('*').eq('source_id', source.id).order('transaction_date', { ascending: false });
-        if (error) throw error;
-        setSettlementTransactions((data || []).map((t: any) => ({
-            id: t.id, source_id: t.source_id, amount: parseFloat(t.amount), transaction_date: new Date(t.transaction_date).getTime(), recorded_by: t.recorded_by, notes: t.notes
-        })));
-      } catch (error: any) { showToast(`خطأ: ${error.message}`, 'error'); }
-    };
-    if (isOpen && source.id) fetchSettlements();
-  }, [isOpen, source.id, showToast]);
 
   const bookedReviewers = useMemo(() => allReviewers.filter(r => r.bookedSourceId === source.id), [allReviewers, source.id]);
   const bookedOfficeRecords = useMemo(() => allOfficeRecords.filter(o => o.bookedSourceId === source.id), [allOfficeRecords, source.id]);

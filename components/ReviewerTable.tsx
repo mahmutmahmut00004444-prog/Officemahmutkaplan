@@ -7,7 +7,6 @@ import SplitFamilyModal from './SplitFamilyModal';
 import LastUploadsModal from './LastUploadsModal'; // Import new component
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
-import { supabase } from '../lib/supabase';
 import { GoogleGenAI } from '@google/genai';
 
 interface ReviewerTableProps {
@@ -38,17 +37,6 @@ interface CurrentContextMenuData {
   member?: FamilyMember;
   parentRecord?: Reviewer;
 }
-
-const generateId = () => {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-};
 
 export default function ReviewerTable({ 
   reviewers, 
@@ -109,30 +97,6 @@ export default function ReviewerTable({
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const preventClickRef = useRef(false); 
   const isSelectionMode = selectedIds.size > 0;
-
-  const copyToClipboard = (text: string) => {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(() => {
-        showToast('تم نسخ النص بنجاح', 'success');
-      }).catch(err => {
-        console.error('Failed to copy: ', err);
-        showToast('فشل نسخ النص', 'error');
-      });
-    } else {
-      // Fallback
-      const textArea = document.createElement("textarea");
-      textArea.value = text;
-      document.body.appendChild(textArea);
-      textArea.select();
-      try {
-        document.execCommand('copy');
-        showToast('تم نسخ النص بنجاح', 'success');
-      } catch (err) {
-        showToast('فشل نسخ النص', 'error');
-      }
-      document.body.removeChild(textArea);
-    }
-  };
 
   const isAdmin = loggedInUser?.role === 'ADMIN';
 
@@ -406,44 +370,44 @@ export default function ReviewerTable({
         const membersToMove = selectedMemberIds.filter(id => id !== newHeadId);
 
         // 1. Create New Reviewer
-        const newReviewerPayload = {
-            id: generateId(),
-            circle_type: recordToSplit.circleType,
-            head_full_name: newHeadMember.fullName,
-            head_surname: newHeadMember.surname || recordToSplit.headSurname,
-            head_mother_name: newHeadMember.motherName || recordToSplit.headMotherName,
-            head_dob: newHeadMember.dob,
-            head_phone: '', 
-            paid_amount: 0,
-            remaining_amount: 0,
-            created_at: new Date().toISOString()
+        const newReviewer: Reviewer = {
+            id: crypto.randomUUID(),
+            circleType: recordToSplit.circleType,
+            headFullName: newHeadMember.fullName,
+            headSurname: newHeadMember.surname || recordToSplit.headSurname,
+            headMotherName: newHeadMember.motherName || recordToSplit.headMotherName,
+            headDob: newHeadMember.dob,
+            headPhone: '', 
+            paidAmount: 0,
+            remainingAmount: 0,
+            createdAt: new Date().toISOString(),
+            familyMembers: [],
+            isUploaded: false,
+            isBooked: false
         };
 
-        const { data: newReviewer, error: createError } = await supabase
-            .from('reviewers')
-            .insert(newReviewerPayload)
-            .select()
-            .single();
+        const storedReviewers = localStorage.getItem('reviewers');
+        if (!storedReviewers) throw new Error('لم يتم العثور على المراجعين');
+        let allReviewers: Reviewer[] = JSON.parse(storedReviewers);
 
-        if (createError) throw createError;
+        // Update original record
+        allReviewers = allReviewers.map(r => {
+            if (r.id === recordToSplit.id) {
+                const remainingMembers = r.familyMembers.filter(m => !selectedMemberIds.includes(m.id));
+                return { ...r, familyMembers: remainingMembers };
+            }
+            return r;
+        });
 
-        // 2. Move Selected Members
-        if (membersToMove.length > 0) {
-            const { error: moveError } = await supabase
-                .from('family_members')
-                .update({ reviewer_id: newReviewer.id })
-                .in('id', membersToMove);
-            
-            if (moveError) throw moveError;
-        }
+        // Add moved members to new record
+        const movedMembers = recordToSplit.familyMembers
+            .filter(m => membersToMove.includes(m.id))
+            .map(m => ({ ...m, id: crypto.randomUUID() }));
+        
+        newReviewer.familyMembers = movedMembers;
 
-        // 3. Delete the "New Head" from family_members
-        const { error: deleteError } = await supabase
-            .from('family_members')
-            .delete()
-            .eq('id', newHeadId);
-
-        if (deleteError) throw deleteError;
+        allReviewers.push(newReviewer);
+        localStorage.setItem('reviewers', JSON.stringify(allReviewers));
 
         showToast('تم قسم العائلة وإنشاء سجل جديد بنجاح', 'success');
         setShowSplitModal(false);
@@ -471,20 +435,6 @@ export default function ReviewerTable({
     if (currentContextMenuData.type === 'head') {
       const r = currentContextMenuData.record!;
       const items: ContextMenuItem[] = [
-        { 
-          label: '📋 نسخ بيانات السجل', 
-          onClick: () => {
-            let text = `الاسم: ${r.headFullName}\nالأم: ${r.headMotherName}\nالصلة: رئيس`;
-            if (r.familyMembers && r.familyMembers.length > 0) {
-              text += `\n--------------------------`;
-              r.familyMembers.forEach(m => {
-                text += `\nالاسم: ${m.fullName}\nالأم: ${m.motherName || r.headMotherName || '-'}\nالصلة: ${m.relationship}\n--------------------------`;
-              });
-            }
-            copyToClipboard(text);
-          }
-        },
-        { isSeparator: true },
         { 
           label: r.isUploaded ? '🟣 إلغاء حالة الرفع' : '🟣 تمييز كمرفوع بنجاح', 
           onClick: () => {
@@ -516,14 +466,6 @@ export default function ReviewerTable({
       const m = currentContextMenuData.member!;
       const parent = currentContextMenuData.parentRecord!;
       return [
-        { 
-          label: '📋 نسخ بيانات الفرد', 
-          onClick: () => {
-            const text = `الاسم: ${m.fullName}\nالأم: ${m.motherName || parent.headMotherName || '-'}\nالصلة: ${m.relationship}`;
-            copyToClipboard(text);
-          }
-        },
-        { isSeparator: true },
         { label: 'حذف هذا الفرد', onClick: () => setDeleteConfirm({ id: m.id, name: m.fullName, type: 'member', parentId: parent.id }), isDestructive: true }
       ];
     }
@@ -809,15 +751,7 @@ export default function ReviewerTable({
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 items-center">
-          <input 
-            type="text" 
-            placeholder="بحث بالاسم الكامل..." 
-            value={searchQuery} 
-            onChange={e => setSearchQuery(e.target.value)} 
-            className="w-full h-9 px-4 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-black outline-none" 
-            lang="ar"
-            inputMode="text"
-          />
+          <input type="text" placeholder="بحث بالاسم الكامل..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full h-9 px-4 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-black outline-none" />
           <select value={circleFilter} onChange={e => setCircleFilter(e.target.value)} className="h-9 px-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none cursor-pointer">
             <option value="ALL">جميع الدوائر</option>
             {Object.values(CircleType).map(t => <option key={t} value={t}>{CIRCLE_NAMES[t]}</option>)}
@@ -872,7 +806,6 @@ export default function ReviewerTable({
               <th className="w-20">اللقب</th>
               <th className="text-right px-2">الأم</th>
               <th className="w-18">التولد</th>
-              <th className="w-16">أفراد الأسرة</th>
               <th className="w-14">الصلة</th>
               <th className="w-24">الهاتف</th>
               <th className="w-18">الحالة للحجز</th>
@@ -942,7 +875,6 @@ export default function ReviewerTable({
                     <td className={`font-black text-[10px] text-slate-950 ${textClass}`}>{r.headSurname || '—'}</td>
                     <td className={`text-right font-black px-2 text-[10px] truncate max-w-[100px] text-slate-950 ${textClass}`}>{r.headMotherName}</td>
                     <td className={`text-center font-black text-[10px] text-slate-950 ${textClass}`} dir="ltr">{r.headDob}</td>
-                    <td className={`text-center font-black text-[10px] text-blue-700 ${textClass}`}>{r.familyMembers?.length || 0}</td>
                     <td className="text-center"><span className="bg-slate-800 text-white text-[8px] font-black px-1.5 py-0.5 rounded">رئيس</span></td>
                     <td className={`text-center font-black text-[10px] text-slate-950 ${textClass}`} dir="ltr">{r.headPhone}</td>
                     
@@ -967,12 +899,11 @@ export default function ReviewerTable({
                     <tr key={m.id} className={`${isActuallyBooked && !isSelected ? 'bg-green-50' : ''} ${isUploaded && !isSelected ? 'bg-fuchsia-50' : ''} ${isDuplicate && !isSelected ? 'bg-red-50' : ''} ${isSelected ? 'bg-blue-50' : ''} border-b border-slate-50 text-[10px] cursor-pointer select-none`} onClick={(e) => handleContextMenuClick(e, m, 'member', r)} onContextMenu={(e) => handleContextMenuClick(e, m, 'member', r)}>
                       <td colSpan={2}></td>
                       <td className={`text-right font-black px-2 pr-6 ${isSelected ? 'text-black' : 'text-slate-700'}`}>{m.fullName}</td>
-                      <td className={`font-black ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.surname || r.headSurname || '—'}</td>
-                      <td className={`text-right font-black px-2 ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.motherName || r.headMotherName || '—'}</td>
+                      <td className={`font-black ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.surname || '—'}</td>
+                      <td className={`text-right font-black px-2 ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.motherName}</td>
                       <td className={`text-center font-black ${isSelected ? 'text-black' : 'text-slate-600'}`} dir="ltr">{m.dob}</td>
-                      <td></td>
                       <td className="text-center"><span className="bg-slate-100 text-slate-500 text-[8px] font-black px-1.5 py-0.5 rounded">{m.relationship}</span></td>
-                      <td colSpan={10}></td>
+                      <td colSpan={9}></td>
                     </tr>
                   ))}
                 </React.Fragment>

@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { OfficeRecord, CIRCLE_NAMES, OfficeUser, LoggedInUser, RecycleBinItem, CircleType } from '../types';
-import { supabase } from '../lib/supabase';
 
 interface OfficeReceiptsProps {
   records: OfficeRecord[];
@@ -38,29 +37,28 @@ export default function OfficeReceipts({ records, onGoBack, loggedInUser, allOff
     const fetchTrash = async () => {
       setIsLoadingTrash(true);
       try {
-        const { data, error } = await supabase
-          .from('recycle_bin')
-          .select('*')
-          .not('original_data->booking_image', 'is', null); // Only items with booking image
-
-        if (error) throw error;
-
-        const recovered: OfficeRecord[] = (data || []).map((item: RecycleBinItem) => {
-           // Map recycle bin item back to OfficeRecord structure temporarily for display
-           const original = item.original_data;
-           return {
-             ...original,
-             id: item.original_id, 
-             isArchived: true, 
-             bookingImage: original.bookingImage,
-             bookingDate: original.bookingDate,
-             headFullName: original.headFullName,
-             circleType: original.circleType,
-             affiliation: original.affiliation || 'محذوف',
-             bookingCreatedAt: new Date(original.bookingCreatedAt || item.deleted_at).getTime() // Fallback
-           };
-        });
-        setTrashReceipts(recovered);
+        const storedTrash = localStorage.getItem('recycle_bin');
+        if (storedTrash) {
+          const trash = JSON.parse(storedTrash);
+          const recovered: OfficeRecord[] = trash
+            .filter((item: RecycleBinItem) => !!item.original_data.bookingImage)
+            .map((item: RecycleBinItem) => {
+               // Map recycle bin item back to OfficeRecord structure temporarily for display
+               const original = item.original_data;
+               return {
+                 ...original,
+                 id: item.original_id, 
+                 isArchived: true, 
+                 bookingImage: original.bookingImage,
+                 bookingDate: original.bookingDate,
+                 headFullName: original.headFullName,
+                 circleType: original.circleType,
+                 affiliation: original.affiliation || 'محذوف',
+                 bookingCreatedAt: new Date(original.bookingCreatedAt || item.deleted_at).getTime() // Fallback
+               };
+            });
+          setTrashReceipts(recovered);
+        }
       } catch (e: any) {
         console.error("Error fetching trash receipts", String(e));
       } finally {

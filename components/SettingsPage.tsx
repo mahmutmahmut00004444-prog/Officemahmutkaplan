@@ -8,9 +8,10 @@ interface SettingsPageProps {
   onGoBack: () => void;
   loggedInUser: LoggedInUser | null;
   onChangeAdminPassword?: (oldPass: string, newPass: string) => Promise<void>;
+  onGenerateMockData?: () => Promise<void>;
 }
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onResetClick, onGoBack, loggedInUser, onChangeAdminPassword }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onResetClick, onGoBack, loggedInUser, onChangeAdminPassword, onGenerateMockData }) => {
   const isAdmin = loggedInUser?.role === 'ADMIN';
   
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -229,6 +230,19 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate, onResetClick, o
                   <div className="overflow-hidden">
                     <h3 className="text-lg font-black text-red-600 mb-1">تصفير كافة السجلات</h3>
                     <p className="text-xs font-bold text-red-400 leading-relaxed">حذف نهائي لكافة البيانات من النظام (يتطلب تأكيد)</p>
+                  </div>
+                </button>
+
+                <button 
+                  onClick={onGenerateMockData}
+                  className="flex items-center gap-6 p-6 bg-purple-50 border-2 border-purple-100 rounded-[2rem] hover:border-purple-600 hover:bg-white transition-all text-right group shadow-sm hover:shadow-xl"
+                >
+                  <div className="w-16 h-16 shrink-0 rounded-2xl flex items-center justify-center bg-white shadow-md border-purple-100 group-hover:scale-110 transition-transform">
+                    <svg className="w-8 h-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                  </div>
+                  <div className="overflow-hidden">
+                    <h3 className="text-lg font-black text-purple-600 mb-1">إضافة 50 عائلة افتراضية</h3>
+                    <p className="text-xs font-bold text-purple-400 leading-relaxed">توليد بيانات عشوائية لغرض التجربة والاختبار</p>
                   </div>
                 </button>
               </>

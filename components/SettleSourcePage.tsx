@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { BookingSource, SettlementTransaction, LoggedInUser } from '../types';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface SettleSourcePageProps {
   onGoBack: () => void;
@@ -11,6 +10,7 @@ interface SettleSourcePageProps {
   loggedInUser: LoggedInUser;
   onSettlePayment: (sourceId: string, amount: number, notes?: string) => Promise<void>; // Handler to save settlement
   formatCurrency: (amount: number | string | undefined) => string; // NEW: Pass formatCurrency prop
+  transactions: SettlementTransaction[];
 }
 
 const SettleSourcePage: React.FC<SettleSourcePageProps> = ({
@@ -21,51 +21,16 @@ const SettleSourcePage: React.FC<SettleSourcePageProps> = ({
   loggedInUser,
   onSettlePayment,
   formatCurrency, // NEW
+  transactions,
 }) => {
   const [settlementAmount, setSettlementAmount] = useState<number>(0);
   const [settlementNotes, setSettlementNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [transactions, setTransactions] = useState<SettlementTransaction[]>([]);
-  const [isFetchingTransactions, setIsFetchingTransactions] = useState(true);
 
   // Initialize settlement amount with the full outstanding balance by default
   useEffect(() => {
     setSettlementAmount(Math.round(outstandingBalance));
   }, [outstandingBalance]);
-
-  // Fetch past settlement transactions for this source
-  useEffect(() => {
-    const fetchTransactions = async () => {
-      if (!isSupabaseConfigured) {
-        setTransactions([]);
-        setIsFetchingTransactions(false);
-        return;
-      }
-      setIsFetchingTransactions(true);
-      try {
-        const { data, error } = await supabase
-          .from('settlement_transactions')
-          .select('*')
-          .eq('source_id', source.id)
-          .order('transaction_date', { ascending: false });
-
-        if (error) throw error;
-        setTransactions((data || []).map((t: any) => ({
-          id: t.id,
-          source_id: t.source_id,
-          amount: parseFloat(t.amount),
-          transaction_date: new Date(t.transaction_date).getTime(),
-          recorded_by: t.recorded_by,
-          notes: t.notes,
-        })));
-      } catch (error: any) {
-        showToast(`خطأ في جلب سجلات التسديد: ${error.message}`, 'error');
-      } finally {
-        setIsFetchingTransactions(false);
-      }
-    };
-    fetchTransactions();
-  }, [source.id, showToast, isSubmitting, isSupabaseConfigured]); // Re-fetch on submit success
 
   const handleSettle = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -170,9 +135,7 @@ const SettleSourcePage: React.FC<SettleSourcePageProps> = ({
               </tr>
             </thead>
             <tbody>
-              {isFetchingTransactions ? (
-                <tr><td colSpan={5} className="py-24 text-center text-slate-300 font-black text-xl italic">جاري جلب سجلات التسديد...</td></tr>
-              ) : transactions.length === 0 ? (
+              {transactions.length === 0 ? (
                 <tr><td colSpan={5} className="py-24 text-center text-slate-300 font-black text-xl italic">لا توجد سجلات تسديد لهذا المصدر.</td></tr>
               ) : (
                 transactions.map((t, idx) => (

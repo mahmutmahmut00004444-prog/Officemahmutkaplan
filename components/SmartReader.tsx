@@ -2,7 +2,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { GoogleGenAI, GenerateContentResponse } from '@google/genai';
 import { Reviewer, OfficeRecord, ProcessingLog } from '../types';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface SmartReaderProps {
   reviewers: Reviewer[];
@@ -94,12 +93,12 @@ const SmartReader: React.FC<SmartReaderProps> = ({ reviewers, officeRecords, onA
       logs.push(log);
       setProgress(Math.round(((i + 1) / files.length) * 100));
       
-      if (isSupabaseConfigured) {
-        await supabase.from('processing_logs').insert({
-          file_name: log.fileName, extracted_name: log.extractedName, extracted_date: log.extractedDate,
-          target_table_type: log.targetTableType, matched_name: log.matchedName, status: log.status,
-          image_data: log.imageData, date_key: log.dateKey
-        });
+      try {
+        const storedLogs = localStorage.getItem('processing_logs');
+        const allLogs = storedLogs ? JSON.parse(storedLogs) : [];
+        localStorage.setItem('processing_logs', JSON.stringify([log, ...allLogs].slice(0, 100))); // Keep last 100
+      } catch (e) {
+        console.error("Error saving log", e);
       }
     }
     setHistory(prev => [...logs, ...prev]);

@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { BookingSource, LoggedInUser, CIRCLE_NAMES, CircleType, Reviewer, OfficeRecord, SettlementTransaction, SourceStatementTab } from '../types';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import ContextMenuModal from './ContextMenuModal';
 import { formatCurrency } from '../lib/formatCurrency';
 
@@ -15,11 +14,12 @@ interface BookingSourcesManagerProps {
   allReviewers: Reviewer[];
   allOfficeRecords: OfficeRecord[];
   bookingSources: BookingSource[];
+  settlementTransactions: SettlementTransaction[];
   onRemoveBookingFromSource: (recordId: string, sourceId: string | null, recordType: 'reviewer' | 'office') => Promise<void>;
   onGoBack: () => void;
 }
 
-export default function BookingSourcesManager({ showToast, loggedInUser, fetchAllData, onViewAccountStatement, onOpenAddBookingToSourcePage, onOpenSettleSourcePage, allReviewers, allOfficeRecords, bookingSources, onRemoveBookingFromSource, onGoBack }: BookingSourcesManagerProps) {
+export default function BookingSourcesManager({ showToast, loggedInUser, fetchAllData, onViewAccountStatement, onOpenAddBookingToSourcePage, onOpenSettleSourcePage, allReviewers, allOfficeRecords, bookingSources, settlementTransactions, onRemoveBookingFromSource, onGoBack }: BookingSourcesManagerProps) {
   const [sources, setSources] = useState<BookingSource[]>([]);
   
   // استخدام number | '' للسماح بحقل فارغ أثناء الكتابة
@@ -49,27 +49,11 @@ export default function BookingSourcesManager({ showToast, loggedInUser, fetchAl
   const [isContextMenuModalOpen, setIsContextMenuModalOpen] = useState(false);
   const [currentContextMenuSource, setCurrentContextMenuSource] = useState<BookingSource | null>(null);
   const [showNewSourceForm, setShowNewSourceForm] = useState(false);
-  const [allSettlementTransactions, setAllSettlementTransactions] = useState<SettlementTransaction[]>([]);
   const newSourceNameRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = loggedInUser?.role === 'ADMIN';
 
   useEffect(() => { setSources(bookingSources); }, [bookingSources]);
-
-  useEffect(() => {
-    const fetchSettlements = async () => {
-      if (!isSupabaseConfigured) return;
-      try {
-        const { data, error } = await supabase.from('settlement_transactions').select('*');
-        if (error) throw error;
-        setAllSettlementTransactions((data || []).map((t: any) => ({
-            id: t.id, source_id: t.source_id, amount: parseFloat(t.amount),
-            transaction_date: new Date(t.transaction_date).getTime(), recorded_by: t.recorded_by, notes: t.notes
-        })));
-      } catch (error: any) { showToast(`خطأ في جلب سجلات التسوية: ${error.message}`, 'error'); }
-    };
-    fetchSettlements();
-  }, [isSupabaseConfigured, bookingSources, showToast]);
 
   useEffect(() => { if (showNewSourceForm && newSourceNameRef.current) newSourceNameRef.current.focus(); }, [showNewSourceForm]);
 
@@ -89,18 +73,24 @@ export default function BookingSourcesManager({ showToast, loggedInUser, fetchAl
     if (!newSourceName.trim()) { showToast('الرجاء إدخال اسم المصدر', 'error'); return; }
     setSubmittingNewSource(true);
     try {
-      const { error } = await supabase.from('booking_sources').insert({
-        source_name: newSourceName.trim(),
-        phone_number: newSourcePhone.trim(),
-        price_right_mosul: Number(newPriceRightMosul) || 0,
-        price_left_mosul: Number(newPriceLeftMosul) || 0,
-        price_others: Number(newPriceOthers) || 0,
-        price_hammam_alalil: Number(newPriceHammamAlAlil) || 0,
-        price_alshoura: Number(newPriceAlShoura) || 0,
-        price_baaj: Number(newPriceBaaj) || 0,
-        created_by: loggedInUser.username
-      });
-      if (error) throw error;
+      const newSource: BookingSource = {
+        id: crypto.randomUUID(),
+        sourceName: newSourceName.trim(),
+        phoneNumber: newSourcePhone.trim(),
+        priceRightMosul: Number(newPriceRightMosul) || 0,
+        priceLeftMosul: Number(newPriceLeftMosul) || 0,
+        priceOthers: Number(newPriceOthers) || 0,
+        priceHammamAlAlil: Number(newPriceHammamAlAlil) || 0,
+        priceAlShoura: Number(newPriceAlShoura) || 0,
+        priceBaaj: Number(newPriceBaaj) || 0,
+        createdBy: loggedInUser.username,
+        createdAt: new Date().toISOString()
+      };
+
+      const storedSources = localStorage.getItem('booking_sources');
+      const allSources = storedSources ? JSON.parse(storedSources) : [];
+      localStorage.setItem('booking_sources', JSON.stringify([...allSources, newSource]));
+
       showToast('تم إنشاء المصدر بنجاح', 'success');
       setNewSourceName(''); setNewSourcePhone(''); 
       setNewPriceRightMosul(''); setNewPriceLeftMosul(''); setNewPriceOthers('');
@@ -108,12 +98,7 @@ export default function BookingSourcesManager({ showToast, loggedInUser, fetchAl
       setShowNewSourceForm(false);
       fetchAllData(true);
     } catch (error: any) { 
-      // التحقق من خطأ الأعمدة المفقودة
-      if (error.message?.includes('Could not find') && error.message?.includes('column')) {
-        showToast('خطأ: قاعدة البيانات تحتاج لتحديث (شغل كود SQL في lib/supabase.ts)', 'error');
-      } else {
         showToast(`خطأ: ${error.message}`, 'error'); 
-      }
     } finally { setSubmittingNewSource(false); }
   };
 
@@ -135,26 +120,29 @@ export default function BookingSourcesManager({ showToast, loggedInUser, fetchAl
     if (!isAdmin || !editingSource) return;
     setLoading(true);
     try {
-      const { error } = await supabase.from('booking_sources').update({
-        source_name: editSourceName.trim(),
-        phone_number: editSourcePhone.trim(),
-        price_right_mosul: Number(editPriceRightMosul) || 0,
-        price_left_mosul: Number(editPriceLeftMosul) || 0,
-        price_others: Number(editPriceOthers) || 0,
-        price_hammam_alalil: Number(editPriceHammamAlAlil) || 0,
-        price_alshoura: Number(editPriceAlShoura) || 0,
-        price_baaj: Number(editPriceBaaj) || 0,
-      }).eq('id', editingSource.id);
-      if (error) throw error;
+      const storedSources = localStorage.getItem('booking_sources');
+      if (storedSources) {
+        const allSources = JSON.parse(storedSources).map((s: any) => 
+          s.id === editingSource.id ? {
+            ...s,
+            sourceName: editSourceName.trim(),
+            phoneNumber: editSourcePhone.trim(),
+            priceRightMosul: Number(editPriceRightMosul) || 0,
+            priceLeftMosul: Number(editPriceLeftMosul) || 0,
+            priceOthers: Number(editPriceOthers) || 0,
+            priceHammamAlAlil: Number(editPriceHammamAlAlil) || 0,
+            priceAlShoura: Number(editPriceAlShoura) || 0,
+            priceBaaj: Number(editPriceBaaj) || 0,
+          } : s
+        );
+        localStorage.setItem('booking_sources', JSON.stringify(allSources));
+      }
+
       showToast('تم التحديث بنجاح', 'success');
       setEditingSource(null);
       fetchAllData(true);
     } catch (error: any) { 
-        if (error.message?.includes('Could not find') && error.message?.includes('column')) {
-            showToast('خطأ: قاعدة البيانات تحتاج لتحديث (شغل كود SQL في lib/supabase.ts)', 'error');
-        } else {
-            showToast(`خطأ: ${error.message}`, 'error'); 
-        }
+        showToast(`خطأ: ${error.message}`, 'error'); 
     } finally { setLoading(false); }
   };
 
@@ -163,9 +151,32 @@ export default function BookingSourcesManager({ showToast, loggedInUser, fetchAl
     setLoading(true);
     try {
       const id = deleteSourceConfirm.id;
-      await supabase.from('reviewers').update({ booked_source_id: null, uploaded_source_id: null }).or(`booked_source_id.eq.${id},uploaded_source_id.eq.${id}`);
-      await supabase.from('office_records').update({ booked_source_id: null, uploaded_source_id: null }).or(`booked_source_id.eq.${id},uploaded_source_id.eq.${id}`);
-      await supabase.from('booking_sources').delete().eq('id', id);
+      
+      // Update reviewers
+      const storedReviewers = localStorage.getItem('reviewers');
+      if (storedReviewers) {
+        const reviewers = JSON.parse(storedReviewers).map((r: any) => 
+          (r.bookedSourceId === id || r.uploadedSourceId === id) ? { ...r, bookedSourceId: null, uploadedSourceId: null } : r
+        );
+        localStorage.setItem('reviewers', JSON.stringify(reviewers));
+      }
+
+      // Update office records
+      const storedOfficeRecords = localStorage.getItem('office_records');
+      if (storedOfficeRecords) {
+        const records = JSON.parse(storedOfficeRecords).map((o: any) => 
+          (o.bookedSourceId === id || o.uploadedSourceId === id) ? { ...o, bookedSourceId: null, uploadedSourceId: null } : o
+        );
+        localStorage.setItem('office_records', JSON.stringify(records));
+      }
+
+      // Delete source
+      const storedSources = localStorage.getItem('booking_sources');
+      if (storedSources) {
+        const sources = JSON.parse(storedSources).filter((s: any) => s.id !== id);
+        localStorage.setItem('booking_sources', JSON.stringify(sources));
+      }
+
       showToast('تم الحذف بنجاح', 'success');
       setDeleteSourceConfirm(null);
       fetchAllData(true);
@@ -184,9 +195,9 @@ export default function BookingSourcesManager({ showToast, loggedInUser, fetchAl
       else if (r.circleType === CircleType.BAAJ) price = r.bookedPriceBaaj || source.priceBaaj;
       totalRevenue += price;
     });
-    const totalSettled = allSettlementTransactions.filter(t => t.source_id === source.id).reduce((sum, t) => sum + t.amount, 0);
+    const totalSettled = settlementTransactions.filter(t => t.source_id === source.id).reduce((sum, t) => sum + t.amount, 0);
     return totalRevenue - totalSettled;
-  }, [allReviewers, allOfficeRecords, allSettlementTransactions]);
+  }, [allReviewers, allOfficeRecords, settlementTransactions]);
 
   const handleContextMenuClick = (source: BookingSource) => {
     setCurrentContextMenuSource(source);

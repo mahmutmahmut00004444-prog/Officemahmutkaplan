@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { RecycleBinItem, CIRCLE_NAMES, CircleType } from '../types';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface TrashBinProps {
   onGoBack: () => void;
@@ -26,24 +25,21 @@ const TrashBin: React.FC<TrashBinProps> = ({ onGoBack, showToast, onRestore }) =
   }, []);
 
   const fetchDeletedItems = async () => {
-    if (!isSupabaseConfigured) return;
     setLoading(true);
     try {
-      // حساب تاريخ قبل 72 ساعة
-      const threeDaysAgo = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
-
-      const { data, error } = await supabase
-        .from('recycle_bin')
-        .select('*')
-        .gt('deleted_at', threeDaysAgo)
-        .order('deleted_at', { ascending: false });
-
-      if (error) throw error;
-      setDeletedItems(data || []);
-    } catch (error: any) {
-      if (!error.message?.includes('does not exist')) {
-          showToast(`خطأ في جلب المحذوفات: ${error.message}`, 'error');
+      const storedTrash = localStorage.getItem('recycle_bin');
+      if (storedTrash) {
+        const trash = JSON.parse(storedTrash);
+        // Filter items older than 72 hours
+        const threeDaysAgo = Date.now() - 72 * 60 * 60 * 1000;
+        const filtered = trash.filter((item: RecycleBinItem) => new Date(item.deleted_at).getTime() > threeDaysAgo);
+        setDeletedItems(filtered);
+        if (filtered.length !== trash.length) {
+          localStorage.setItem('recycle_bin', JSON.stringify(filtered));
+        }
       }
+    } catch (error: any) {
+      showToast(`خطأ في جلب المحذوفات: ${error.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -68,15 +64,14 @@ const TrashBin: React.FC<TrashBinProps> = ({ onGoBack, showToast, onRestore }) =
     if (!selectedItem) return;
     setIsDeleting(true);
     try {
-        const { error } = await supabase
-            .from('recycle_bin')
-            .delete()
-            .eq('id', selectedItem.id);
+        const storedTrash = localStorage.getItem('recycle_bin');
+        if (storedTrash) {
+          const trash = JSON.parse(storedTrash).filter((i: any) => i.id !== selectedItem.id);
+          localStorage.setItem('recycle_bin', JSON.stringify(trash));
+          setDeletedItems(trash);
+        }
 
-        if (error) throw error;
-
-        showToast('تم حذف السجل نهائياً من قاعدة البيانات', 'success');
-        setDeletedItems(prev => prev.filter(i => i.id !== selectedItem.id));
+        showToast('تم حذف السجل نهائياً', 'success');
         setSelectedItem(null);
         setShowDeleteConfirm(false);
     } catch (error: any) {

@@ -7,8 +7,9 @@ import SplitFamilyModal from './SplitFamilyModal';
 import LastUploadsModal from './LastUploadsModal'; // Import
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
-import { supabase } from '../lib/supabase';
 import { GoogleGenAI } from '@google/genai';
+import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, AlignmentType, TextRun, VerticalAlign } from 'docx';
+import { saveAs } from 'file-saver';
 
 interface OfficeTableProps {
   records: OfficeRecord[];
@@ -39,17 +40,6 @@ interface CurrentContextMenuData {
   member?: FamilyMember;
   parentRecord?: OfficeRecord;
 }
-
-const generateId = () => {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-};
 
 const OfficeTable: React.FC<OfficeTableProps> = ({ 
   records, 
@@ -113,30 +103,6 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const preventClickRef = useRef(false); // لمنع النقر العادي بعد نجاح الضغط المطول
   const isSelectionMode = selectedIds.size > 0;
-
-  const copyToClipboard = (text: string) => {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(() => {
-        showToast('تم نسخ النص بنجاح', 'success');
-      }).catch(err => {
-        console.error('Failed to copy: ', err);
-        showToast('فشل نسخ النص', 'error');
-      });
-    } else {
-      // Fallback
-      const textArea = document.createElement("textarea");
-      textArea.value = text;
-      document.body.appendChild(textArea);
-      textArea.select();
-      try {
-        document.execCommand('copy');
-        showToast('تم نسخ النص بنجاح', 'success');
-      } catch (err) {
-        showToast('فشل نسخ النص', 'error');
-      }
-      document.body.removeChild(textArea);
-    }
-  };
 
   const isAdmin = loggedInUser?.role === 'ADMIN';
   const isOfficeUser = loggedInUser?.role === 'OFFICE';
@@ -415,6 +381,128 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
     if(isSelectionMode) setSelectedIds(new Set());
   };
 
+  const handleExportWord = async (isSpecial: boolean = false, customRecords?: OfficeRecord[]) => {
+    const recordsToExport = customRecords || (isSelectionMode
+        ? filteredRecords.filter(r => selectedIds.has(r.id))
+        : filteredRecords);
+
+    if (recordsToExport.length === 0) return;
+
+    try {
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-GB');
+
+      const tableHeader = isSpecial 
+        ? ["ت", "الدائرة", "الاسم الكامل", "اللقب", "الصلة", "اسم الأم", "التولد"]
+        : ["ت", "المكتب", "الدائرة", "الحالة", "الرفع", "سعر الحجز", "الاسم الكامل", "اللقب", "الصلة", "اسم الأم", "التولد"];
+
+      const rows = [];
+      
+      // Header Row
+      rows.push(
+        new TableRow({
+          children: tableHeader.map(text => 
+            new TableCell({
+              children: [new Paragraph({ 
+                children: [new TextRun({ text, bold: true, color: "ffffff", size: 24, rightToLeft: true })], 
+                alignment: AlignmentType.CENTER,
+                bidirectional: true 
+              })],
+              shading: { fill: "000000" },
+              verticalAlign: VerticalAlign.CENTER,
+            })
+          ),
+        })
+      );
+
+      let globalIdx = 1;
+      recordsToExport.forEach((r) => {
+        const isActuallyBooked = r.isBooked || !!r.bookingImage;
+        const currentPrice = getOfficePriceForRecord(r);
+
+        const headData = isSpecial
+          ? [globalIdx.toString(), CIRCLE_NAMES[r.circleType], r.headFullName, r.headSurname || '—', "رئيس", r.headMotherName, r.headDob]
+          : [globalIdx.toString(), r.affiliation, CIRCLE_NAMES[r.circleType], isActuallyBooked ? 'محجوز' : 'غير محجوز', r.isUploaded ? 'مرفوع' : 'غير مرفوع', formatCurrency(currentPrice), r.headFullName, r.headSurname || '—', "رئيس", r.headMotherName, r.headDob];
+
+        rows.push(
+          new TableRow({
+            children: headData.map((text, i) => 
+              new TableCell({
+                children: [new Paragraph({ 
+                  children: [new TextRun({ text, bold: true, size: 22, color: i === (isSpecial ? 4 : 8) ? "0044ff" : "000000", rightToLeft: true })], 
+                  alignment: i === (isSpecial ? 2 : 6) || i === (isSpecial ? 5 : 9) ? AlignmentType.RIGHT : AlignmentType.CENTER,
+                  bidirectional: true
+                })],
+                verticalAlign: VerticalAlign.CENTER,
+              })
+            ),
+          })
+        );
+
+        r.familyMembers.forEach(m => {
+          const memberData = isSpecial
+            ? ["—", "—", m.fullName, m.surname || '—', m.relationship, m.motherName, m.dob]
+            : ["—", "—", "—", "—", "—", "—", m.fullName, m.surname || '—', m.relationship, m.motherName, m.dob];
+
+          rows.push(
+            new TableRow({
+              children: memberData.map((text, i) => 
+                new TableCell({
+                  children: [new Paragraph({ 
+                    children: [new TextRun({ text, size: 20, color: "666666", rightToLeft: true })], 
+                    alignment: i === (isSpecial ? 2 : 6) || i === (isSpecial ? 5 : 9) ? AlignmentType.RIGHT : AlignmentType.CENTER,
+                    bidirectional: true
+                  })],
+                  verticalAlign: VerticalAlign.CENTER,
+                })
+              ),
+            })
+          );
+        });
+        globalIdx++;
+      });
+
+      const table = new Table({
+        rows: rows,
+        width: { size: 100, type: WidthType.PERCENTAGE },
+      });
+
+      const doc = new Document({
+        sections: [{
+          properties: {
+            page: {
+              margin: { top: 720, right: 720, bottom: 720, left: 720 },
+              size: { orientation: isSpecial ? "portrait" : "landscape" }
+            }
+          },
+          children: [
+            new Paragraph({
+              children: [new TextRun({ text: `كشف مراجعين المكاتب (${isSpecial ? 'نسخة خاصة' : 'نسخة عامة'})`, bold: true, size: 36, rightToLeft: true })],
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 200 },
+              bidirectional: true
+            }),
+            new Paragraph({
+              children: [new TextRun({ text: `التاريخ: ${dateStr} | المجموع: ${recordsToExport.length}`, size: 24, rightToLeft: true })],
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 400 },
+              bidirectional: true
+            }),
+            table,
+          ],
+        }],
+      });
+
+      const blob = await Packer.toBlob(doc);
+      saveAs(blob, `Office_Records_${isSpecial ? 'Special' : 'General'}_${Date.now()}.docx`);
+      showToast('تم تصدير ملف Word بنجاح', 'success');
+    } catch (err) {
+      console.error("Word Export Error:", err);
+      showToast('حدث خطأ أثناء تصدير ملف Word', 'error');
+    }
+    if(isSelectionMode) setSelectedIds(new Set());
+  };
+
   const handleContextMenuClick = (e: React.MouseEvent, record: OfficeRecord | FamilyMember, type: CurrentContextMenuData['type'], parentRecord?: OfficeRecord) => {
     e.preventDefault(); e.stopPropagation();
     
@@ -450,42 +538,44 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
 
         const membersToMove = selectedMemberIds.filter(id => id !== newHeadId);
 
-        const newRecordPayload = {
-            id: generateId(),
-            circle_type: recordToSplit.circleType,
-            head_full_name: newHeadMember.fullName,
-            head_surname: newHeadMember.surname || recordToSplit.headSurname,
-            head_mother_name: newHeadMember.motherName || recordToSplit.headMotherName,
-            head_dob: newHeadMember.dob,
-            head_phone: '', 
+        const newRecord: OfficeRecord = {
+            id: crypto.randomUUID(),
+            circleType: recordToSplit.circleType,
+            headFullName: newHeadMember.fullName,
+            headSurname: newHeadMember.surname || recordToSplit.headSurname,
+            headMotherName: newHeadMember.motherName || recordToSplit.headMotherName,
+            headDob: newHeadMember.dob,
+            headPhone: '', 
             affiliation: recordToSplit.affiliation,
-            table_number: recordToSplit.tableNumber,
-            created_at: new Date().toISOString()
+            tableNumber: recordToSplit.tableNumber,
+            createdAt: new Date().toISOString(),
+            familyMembers: [],
+            isUploaded: false,
+            isBooked: false
         };
 
-        const { data: newRecord, error: createError } = await supabase
-            .from('office_records')
-            .insert(newRecordPayload)
-            .select()
-            .single();
+        const storedRecords = localStorage.getItem('office_records');
+        if (!storedRecords) throw new Error('لم يتم العثور على السجلات');
+        let allRecords: OfficeRecord[] = JSON.parse(storedRecords);
 
-        if (createError) throw createError;
+        // Find the original record and update its family members
+        allRecords = allRecords.map(r => {
+            if (r.id === recordToSplit.id) {
+                const remainingMembers = r.familyMembers.filter(m => !selectedMemberIds.includes(m.id));
+                return { ...r, familyMembers: remainingMembers };
+            }
+            return r;
+        });
 
-        if (membersToMove.length > 0) {
-            const { error: moveError } = await supabase
-                .from('office_family_members')
-                .update({ office_record_id: newRecord.id })
-                .in('id', membersToMove);
-            
-            if (moveError) throw moveError;
-        }
+        // Add the moved members to the new record
+        const movedMembers = recordToSplit.familyMembers
+            .filter(m => membersToMove.includes(m.id))
+            .map(m => ({ ...m, id: crypto.randomUUID() })); // Give them new IDs in the new record context if needed, but usually we just move them
+        
+        newRecord.familyMembers = movedMembers;
 
-        const { error: deleteError } = await supabase
-            .from('office_family_members')
-            .delete()
-            .eq('id', newHeadId);
-
-        if (deleteError) throw deleteError;
+        allRecords.push(newRecord);
+        localStorage.setItem('office_records', JSON.stringify(allRecords));
 
         showToast('تم قسم العائلة وإنشاء سجل مكتب جديد بنجاح', 'success');
         setShowSplitModal(false);
@@ -518,20 +608,6 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
 
       if (isAdmin) {
         items.push(
-          { 
-            label: '📋 نسخ بيانات السجل', 
-            onClick: () => {
-              let text = `الاسم: ${r.headFullName}\nالأم: ${r.headMotherName}\nالصلة: رئيس`;
-              if (r.familyMembers && r.familyMembers.length > 0) {
-                text += `\n--------------------------`;
-                r.familyMembers.forEach(m => {
-                  text += `\nالاسم: ${m.fullName}\nالأم: ${m.motherName || r.headMotherName || '-'}\nالصلة: ${m.relationship}\n--------------------------`;
-                });
-              }
-              copyToClipboard(text);
-            }
-          },
-          { isSeparator: true },
           { 
             label: r.isUploaded ? '🟣 إلغاء حالة الرفع' : '🟣 تمييز كمرفوع بنجاح', 
             onClick: () => {
@@ -575,14 +651,6 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
       const parent = currentContextMenuData.parentRecord!;
       const isLocked = isOfficeUser && (parent.isBooked || parent.isUploaded);
       return [
-        { 
-          label: '📋 نسخ بيانات الفرد', 
-          onClick: () => {
-            const text = `الاسم: ${m.fullName}\nالأم: ${m.motherName || parent.headMotherName || '-'}\nالصلة: ${m.relationship}`;
-            copyToClipboard(text);
-          }
-        },
-        { isSeparator: true },
         { label: 'حذف هذا الفرد', onClick: () => setDeleteConfirm({ id: m.id, name: m.fullName, type: 'member', parentId: parent.id }), isDestructive: true, disabled: isLocked, tooltip: isLocked ? permissionDeniedMessage : undefined }
       ];
     }
@@ -827,6 +895,7 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
                      حذف المحدد ({selectedIds.size})
                   </button>
                   <button onClick={() => handleExportPDF(true)} disabled={exportingType !== null} className="h-9 bg-indigo-700 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all disabled:opacity-50 animate-scale-up">تصدير PDF (خاص) للمحدد</button>
+                  <button onClick={() => handleExportWord(true)} className="h-9 bg-blue-800 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all shadow-sm animate-scale-up">تصدير Word (خاص) للمحدد</button>
                   <button onClick={() => setSelectedIds(new Set())} className="h-9 bg-slate-200 text-slate-600 px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all">إلغاء التحديد</button>
                 </>
               ) : (
@@ -852,21 +921,15 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
                   
                   <button onClick={() => handleExportPDF(false)} disabled={exportingType !== null} className="h-9 bg-slate-900 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all disabled:opacity-50">تصدير PDF (عام)</button>
                   <button onClick={() => handleExportPDF(true)} disabled={exportingType !== null} className="h-9 bg-indigo-700 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all disabled:opacity-50">تصدير PDF (خاص)</button>
+                  <button onClick={() => handleExportWord(false)} className="h-9 bg-blue-600 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all shadow-sm">تصدير Word (عام)</button>
+                  <button onClick={() => handleExportWord(true)} className="h-9 bg-blue-800 text-white px-3 rounded-lg text-[10px] font-black active:scale-95 transition-all shadow-sm">تصدير Word (خاص)</button>
                 </>
               )}
            </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 items-center">
-          <input 
-            type="text" 
-            placeholder="بحث بالاسم الكامل..." 
-            value={searchQuery} 
-            onChange={e => setSearchQuery(e.target.value)} 
-            className="w-full h-9 px-4 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-black outline-none" 
-            lang="ar"
-            inputMode="text"
-          />
+          <input type="text" placeholder="بحث بالاسم الكامل..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full h-9 px-4 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-black outline-none" />
           <select value={selectedOffice} onChange={e => setSelectedOffice(e.target.value)} className="h-9 px-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none cursor-pointer" disabled={isOfficeUser && uniqueOffices.length === 1}><option value="ALL">جميع المكاتب</option>{uniqueOffices.map(office => <option key={office} value={office}>{office}</option>)}</select>
           <select value={selectedCircle} onChange={e => setSelectedCircle(e.target.value)} className="h-9 px-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none"><option value="ALL">جميع الدوائر</option>{Object.values(CircleType).map(t => <option key={t} value={t}>{CIRCLE_NAMES[t]}</option>)}</select>
           <select value={familyCountFilter} onChange={e => setFamilyCountFilter(e.target.value)} className="h-9 px-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none">
@@ -913,7 +976,6 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
               <th className="w-20">اللقب</th>
               <th className="text-right px-2">الأم</th>
               <th className="w-18">التولد</th>
-              <th className="w-16">أفراد الأسرة</th>
               <th className="w-14">الصلة</th>
               <th className="w-40">المكتب</th>
               <th className="w-24">الهاتف</th>
@@ -923,7 +985,7 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
               {isAdmin && <th className="w-24">جهة الرفع</th>}
               <th className="w-24">سعر الحجز</th>
               <th className="w-32">تاريخ تقييد الاسم</th>
-              <th className="w-32">تاريخ الحجز</th>
+              <th className="w-24">تاريخ الحجز</th>
               <th className="w-32">صورة الحجز</th>
             </tr>
           </thead>
@@ -937,15 +999,15 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
               const uploadedSource = bookingSourcesMap.get(r.uploadedSourceId || '') || '-';
               const bookedSource = bookingSourcesMap.get(r.bookedSourceId || '') || (isActuallyBooked ? 'يدوي' : '-');
 
-              let rowClasses = `bg-white cursor-pointer transition-colors border-b border-slate-200`;
+              let rowClasses = `bg-white cursor-pointer transition-colors select-none border-b border-slate-200`;
               if (isSelected) {
-                rowClasses = `bg-indigo-50 outline outline-2 outline-indigo-600 -outline-offset-2 cursor-pointer border-b border-indigo-200`;
+                rowClasses = `bg-indigo-50 outline outline-2 outline-indigo-600 -outline-offset-2 select-none cursor-pointer border-b border-indigo-200`;
               } else if (isActuallyBooked) {
-                rowClasses = `has-booking cursor-pointer transition-colors border-b border-green-200`;
+                rowClasses = `has-booking cursor-pointer transition-colors select-none border-b border-green-200`;
               } else if (isUploaded) {
-                rowClasses = `bg-fuchsia-100 cursor-pointer transition-colors border-b border-fuchsia-200`;
+                rowClasses = `bg-fuchsia-100 cursor-pointer transition-colors select-none border-b border-fuchsia-200`;
               } else if (isDuplicate) {
-                rowClasses = `bg-red-100 cursor-pointer transition-colors border-b border-red-200`;
+                rowClasses = `bg-red-100 cursor-pointer transition-colors select-none border-b border-red-200`;
               }
 
               const textClass = isSelected ? 'text-black' : 'text-slate-900';
@@ -972,24 +1034,10 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
                         ) : idx + 1}
                     </td>
                     <td className={`font-black text-[9px] ${isSelected ? 'text-black' : 'text-slate-600'}`}>{CIRCLE_NAMES[r.circleType]}</td>
-                    <td className={`text-right font-black px-2 text-[11px] truncate max-w-[130px] ${isDuplicate && !isSelected ? 'text-red-700 underline decoration-wavy decoration-red-600' : 'text-slate-950'} ${textClass}`}>
-                      <span 
-                        className="cursor-text select-text" 
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onTouchStart={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          // Allow double click to select word, etc.
-                          // But we don't want to completely block context menu if they just click.
-                          // However, the user specifically asked for selection.
-                        }}
-                      >
-                        {r.headFullName}
-                      </span>
-                    </td>
+                    <td className={`text-right font-black px-2 text-[11px] truncate max-w-[130px] ${isDuplicate && !isSelected ? 'text-red-700 underline decoration-wavy decoration-red-600' : 'text-slate-950'} ${textClass}`}>{r.headFullName}</td>
                     <td className={`font-black text-[10px] text-slate-950 ${textClass}`}>{r.headSurname || '—'}</td>
                     <td className={`text-right font-black px-2 text-[10px] truncate max-w-[100px] text-slate-950 ${textClass}`}>{r.headMotherName}</td>
                     <td className={`text-center font-black text-[10px] text-slate-950 ${textClass}`}>{r.headDob}</td>
-                    <td className={`text-center font-black text-[10px] text-blue-700 ${textClass}`}>{r.familyMembers?.length || 0}</td>
                     <td className="text-center"><span className="bg-indigo-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded">رئيس</span></td>
                     <td className={`font-black text-[10px] truncate max-w-[150px] ${isSelected ? 'text-black' : 'text-indigo-700'}`}>{r.affiliation}</td>
                     <td className={`text-center font-black text-[10px] text-slate-950 ${textClass}`} dir="ltr">{r.headPhone}</td>
@@ -1004,18 +1052,7 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
                     <td className="text-center text-[9px] font-bold text-slate-500" dir="ltr">
                       {new Date(r.createdAt).toLocaleString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}
                     </td>
-                    <td className={`text-center font-black text-[10px] ${isSelected ? 'text-black' : 'text-blue-700'}`}>
-                      <div className="flex items-center justify-center gap-1">
-                        <span>{r.bookingDate || '—'}</span>
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); toggleSelection(r); }}
-                          className={`p-1 rounded-md transition-all active:scale-90 ${isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
-                          title="تحديد السجل"
-                        >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>
-                        </button>
-                      </div>
-                    </td>
+                    <td className={`text-center font-black text-[10px] ${isSelected ? 'text-black' : 'text-blue-700'}`}>{r.bookingDate || '—'}</td>
                     <td className="text-center">
                         {r.bookingImage ? (
                              <button onClick={(e) => { e.stopPropagation(); setPreviewImage(r.bookingImage!); }} className="w-10 h-10 rounded-lg border border-green-600 bg-white shadow-sm overflow-hidden mx-auto"><img src={r.bookingImage} className="w-full h-full object-cover" /></button>
@@ -1023,15 +1060,14 @@ const OfficeTable: React.FC<OfficeTableProps> = ({
                     </td>
                   </tr>
                   {r.familyMembers.map(m => (
-                    <tr key={m.id} className={`${isActuallyBooked && !isSelected ? 'bg-green-50' : ''} ${isUploaded && !isSelected ? 'bg-fuchsia-50' : ''} ${isDuplicate && !isSelected ? 'bg-red-50' : ''} ${isSelected ? 'bg-indigo-50' : ''} border-b border-slate-50 text-[10px] cursor-pointer`} onClick={(e) => handleContextMenuClick(e, m, 'member', r)} onContextMenu={(e) => handleContextMenuClick(e, m, 'member', r)}>
+                    <tr key={m.id} className={`${isActuallyBooked && !isSelected ? 'bg-green-50' : ''} ${isUploaded && !isSelected ? 'bg-fuchsia-50' : ''} ${isDuplicate && !isSelected ? 'bg-red-50' : ''} ${isSelected ? 'bg-indigo-50' : ''} border-b border-slate-50 text-[10px] cursor-pointer select-none`} onClick={(e) => handleContextMenuClick(e, m, 'member', r)} onContextMenu={(e) => handleContextMenuClick(e, m, 'member', r)}>
                       <td colSpan={2}></td>
                       <td className={`text-right font-black px-2 pr-6 ${isSelected ? 'text-black' : 'text-slate-700'}`}>{m.fullName}</td>
-                      <td className={`font-black ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.surname || r.headSurname || '—'}</td>
-                      <td className={`text-right font-black px-2 ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.motherName || r.headMotherName || '—'}</td>
+                      <td className={`font-black ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.surname || '—'}</td>
+                      <td className={`text-right font-black px-2 ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.motherName}</td>
                       <td className={`text-center font-black ${isSelected ? 'text-black' : 'text-slate-600'}`}>{m.dob}</td>
-                      <td></td>
                       <td className="text-center"><span className="bg-slate-100 text-slate-500 text-[8px] font-black px-1.5 py-0.5 rounded">{m.relationship}</span></td>
-                      <td colSpan={isAdmin ? 11 : 9}></td>
+                      <td colSpan={isAdmin ? 10 : 8}></td>
                     </tr>
                   ))}
                 </React.Fragment>

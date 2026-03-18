@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Session, LoggedInUser, Device, SessionStats } from '../types';
 import ContextMenuModal, { ContextMenuItem } from './ContextMenuModal';
 
@@ -85,20 +84,16 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
   }, []);
 
   const fetchCooldownSettings = async () => {
-    if (!isSupabaseConfigured) return;
     try {
-      const { data, error } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'session_cooldown_days')
-        .single();
-      
-      if (data) {
-        const val = parseInt(data.value) || 0;
-        setActualCooldownDays(val);
-        setTempCooldownDays(val);
-      } else if (error && error.code !== 'PGRST116') { // Ignore "Row not found" error
-        console.error('Error fetching settings:', error);
+      const storedSettings = localStorage.getItem('app_settings');
+      if (storedSettings) {
+        const settings = JSON.parse(storedSettings);
+        const cooldownSetting = settings.find((s: any) => s.key === 'session_cooldown_days');
+        if (cooldownSetting) {
+          const val = parseInt(cooldownSetting.value) || 0;
+          setActualCooldownDays(val);
+          setTempCooldownDays(val);
+        }
       }
     } catch (err) {
       console.error('Settings fetch error:', err);
@@ -121,70 +116,23 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
   };
 
   const fetchDevices = async () => {
-    if (!isSupabaseConfigured) return;
     try {
-      const { data, error } = await supabase
-        .from('devices')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      setDevices((data || []).map((d: any) => ({
-        id: d.id,
-        deviceName: d.device_name,
-        createdAt: new Date(d.created_at).getTime(),
-        createdBy: d.created_by
-      })));
+      const storedDevices = localStorage.getItem('devices');
+      if (storedDevices) {
+        setDevices(JSON.parse(storedDevices));
+      }
     } catch (err: any) {
       console.error('Error fetching devices:', err);
     }
   };
 
   const fetchSessions = async () => {
-    if (!isSupabaseConfigured) return;
     setLoading(true);
     try {
-      let data, error;
-      try {
-        const res = await supabase
-          .from('sessions')
-          .select('*, devices(device_name)')
-          .order('created_at', { ascending: true }); // الجديد في الأسفل
-        data = res.data;
-        error = res.error;
-      } catch (e) {
-        // Ignored
+      const storedSessions = localStorage.getItem('sessions');
+      if (storedSessions) {
+        setSessions(JSON.parse(storedSessions));
       }
-
-      if (error) {
-         console.warn("Fetch with join failed, falling back to simple fetch", error);
-         const resSimple = await supabase
-          .from('sessions')
-          .select('*')
-          .order('created_at', { ascending: true }); // الجديد في الأسفل
-         data = resSimple.data;
-         error = resSimple.error;
-      }
-
-      if (error) throw error;
-
-      setSessions((data || []).map((s: any) => {
-        let deviceData = s.devices;
-        if (Array.isArray(deviceData)) deviceData = deviceData[0];
-        
-        return {
-          id: s.id,
-          phoneNumber: s.phone_number,
-          phoneSource: s.phone_source,
-          deviceId: s.device_id,
-          device: deviceData ? { deviceName: deviceData.device_name } : undefined,
-          lastBookingDate: s.last_booking_date,
-          isBooked: s.is_booked || false,
-          isUploaded: s.is_uploaded || false,
-          createdAt: new Date(s.created_at).getTime(),
-          createdBy: s.created_by
-        };
-      }));
     } catch (err: any) {
       showToast(`فشل جلب الجلسات: ${err.message}`, 'error');
     } finally {
@@ -297,11 +245,11 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
     setIsSubmitting(true);
     try {
       const ids = Array.from(selectedIds);
-      const { error } = await supabase.from('sessions').update({ is_uploaded: true }).in('id', ids);
-      if (error) throw error;
+      const updatedSessions = sessions.map(s => ids.includes(s.id) ? { ...s, isUploaded: true } : s);
+      localStorage.setItem('sessions', JSON.stringify(updatedSessions));
       
       showToast(`تم رفع ${ids.length} جلسة بنجاح`, 'success');
-      setSessions(prev => prev.map(s => ids.includes(s.id) ? { ...s, isUploaded: true } : s));
+      setSessions(updatedSessions);
       setSelectedIds(new Set());
     } catch (err: any) {
       showToast(`فشل الرفع الجماعي: ${err.message}`, 'error');
@@ -315,11 +263,11 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
     setIsSubmitting(true);
     try {
       const ids = Array.from(selectedIds);
-      const { error } = await supabase.from('sessions').update({ is_uploaded: false }).in('id', ids);
-      if (error) throw error;
+      const updatedSessions = sessions.map(s => ids.includes(s.id) ? { ...s, isUploaded: false } : s);
+      localStorage.setItem('sessions', JSON.stringify(updatedSessions));
       
       showToast(`تم إلغاء رفع ${ids.length} جلسة`, 'success');
-      setSessions(prev => prev.map(s => ids.includes(s.id) ? { ...s, isUploaded: false } : s));
+      setSessions(updatedSessions);
       setSelectedIds(new Set());
     } catch (err: any) {
       showToast(`فشل العملية: ${err.message}`, 'error');
@@ -333,11 +281,11 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
     setIsSubmitting(true);
     try {
       const ids = Array.from(selectedIds);
-      const { error } = await supabase.from('sessions').delete().in('id', ids);
-      if (error) throw error;
+      const updatedSessions = sessions.filter(s => !ids.includes(s.id));
+      localStorage.setItem('sessions', JSON.stringify(updatedSessions));
       
       showToast(`تم حذف ${ids.length} جلسة نهائياً`, 'success');
-      setSessions(prev => prev.filter(s => !ids.includes(s.id)));
+      setSessions(updatedSessions);
       setSelectedIds(new Set());
       setShowBulkDeleteSelectedConfirm(false);
     } catch (err: any) {
@@ -350,12 +298,11 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
   const handleCancelAllUploads = async () => {
     setIsSubmitting(true);
     try {
-      // Sets is_uploaded = false for ALL sessions in the database
-      const { error } = await supabase.from('sessions').update({ is_uploaded: false }).neq('id', '00000000-0000-0000-0000-000000000000'); 
-      if (error) throw error;
+      const updatedSessions = sessions.map(s => ({ ...s, isUploaded: false }));
+      localStorage.setItem('sessions', JSON.stringify(updatedSessions));
 
       showToast('تم إلغاء رفع جميع الجلسات', 'success');
-      setSessions(prev => prev.map(s => ({ ...s, isUploaded: false })));
+      setSessions(updatedSessions);
       setShowBulkCancelConfirm(false);
     } catch (err: any) {
       showToast(`فشل الإلغاء: ${err.message}`, 'error');
@@ -372,12 +319,16 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
     }
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('devices').insert({
-        device_name: newDeviceName.trim(),
-        created_by: loggedInUser.username
-      });
+      const newDevice: Device = {
+        id: crypto.randomUUID(),
+        deviceName: newDeviceName.trim(),
+        createdAt: Date.now(),
+        createdBy: loggedInUser.username
+      };
 
-      if (error) throw error;
+      const storedDevices = localStorage.getItem('devices');
+      const allDevices = storedDevices ? JSON.parse(storedDevices) : [];
+      localStorage.setItem('devices', JSON.stringify([...allDevices, newDevice]));
 
       showToast('تم تسجيل النسخة (الجهاز) بنجاح', 'success');
       setNewDeviceName('');
@@ -417,22 +368,26 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
 
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('sessions').insert({
-        phone_number: phoneNumber.trim(),
-        phone_source: phoneSource.trim(), // Stays sticky
-        device_id: selectedDeviceId || null, // Stays sticky
-        last_booking_date: lastBookingDate.trim(),
-        created_by: loggedInUser.username
-      });
+      const newSession: Session = {
+        id: crypto.randomUUID(),
+        phoneNumber: phoneNumber.trim(),
+        phoneSource: phoneSource.trim(),
+        deviceId: selectedDeviceId || null,
+        lastBookingDate: lastBookingDate.trim(),
+        createdAt: Date.now(),
+        createdBy: loggedInUser.username,
+        isBooked: false,
+        isUploaded: false
+      };
 
-      if (error) throw error;
+      const storedSessions = localStorage.getItem('sessions');
+      const allSessions = storedSessions ? JSON.parse(storedSessions) : [];
+      localStorage.setItem('sessions', JSON.stringify([...allSessions, newSession]));
 
       showToast('تم حفظ الجلسة بنجاح', 'success');
       setPhoneNumber('');
-      // setPhoneSource(''); // REMOVED to keep sticky
       setLastBookingDate('');
       
-      // Refresh the table immediately
       await fetchSessions();
     } catch (err: any) {
       showToast(`خطأ في الحفظ: ${err.message}`, 'error');
@@ -451,22 +406,15 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
     const today = new Date().toISOString().split('T')[0];
 
     try {
-      const { error } = await supabase
-        .from('sessions')
-        .update({ 
-          is_booked: true,
-          last_booking_date: today 
-        })
-        .eq('id', selectedSession.id);
-
-      if (error) throw error;
-      showToast('تم تحديث تاريخ الحجز لليوم', 'success');
-      
-      setSessions(prev => prev.map(s => 
+      const updatedSessions = sessions.map(s => 
         s.id === selectedSession.id 
           ? { ...s, isBooked: true, lastBookingDate: today } 
           : s
-      ));
+      );
+      localStorage.setItem('sessions', JSON.stringify(updatedSessions));
+
+      showToast('تم تحديث تاريخ الحجز لليوم', 'success');
+      setSessions(updatedSessions);
     } catch (err: any) {
       showToast(`فشل التحديث: ${err.message}`, 'error');
     }
@@ -478,19 +426,15 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
     const newStatus = !selectedSession.isUploaded;
     
     try {
-      const { error } = await supabase
-        .from('sessions')
-        .update({ is_uploaded: newStatus })
-        .eq('id', selectedSession.id);
-
-      if (error) throw error;
-      showToast(newStatus ? 'تم تغيير الحالة إلى مرفوع (جوزي)' : 'تم إلغاء حالة الرفع', 'success');
-      
-      setSessions(prev => prev.map(s => 
+      const updatedSessions = sessions.map(s => 
         s.id === selectedSession.id 
           ? { ...s, isUploaded: newStatus } 
           : s
-      ));
+      );
+      localStorage.setItem('sessions', JSON.stringify(updatedSessions));
+
+      showToast(newStatus ? 'تم تغيير الحالة إلى مرفوع (جوزي)' : 'تم إلغاء حالة الرفع', 'success');
+      setSessions(updatedSessions);
     } catch (err: any) {
       showToast(`فشل التحديث: ${err.message}`, 'error');
     }
@@ -510,17 +454,20 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
     if (!selectedSession) return;
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('sessions').update({
-        phone_number: editPhoneNumber,
-        phone_source: editPhoneSource,
-        device_id: editDeviceId || null,
-        last_booking_date: editLastBookingDate,
-        is_uploaded: editIsUploaded
-      }).eq('id', selectedSession.id);
+      const updatedSessions = sessions.map(s => 
+        s.id === selectedSession.id ? {
+          ...s,
+          phoneNumber: editPhoneNumber,
+          phoneSource: editPhoneSource,
+          deviceId: editDeviceId || null,
+          lastBookingDate: editLastBookingDate,
+          isUploaded: editIsUploaded
+        } : s
+      );
+      localStorage.setItem('sessions', JSON.stringify(updatedSessions));
 
-      if (error) throw error;
       showToast('تم تعديل الجلسة بنجاح', 'success');
-      await fetchSessions();
+      setSessions(updatedSessions);
       setIsEditModalOpen(false);
     } catch (err: any) {
       showToast(`فشل التعديل: ${err.message}`, 'error');
@@ -540,19 +487,15 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
     if (!selectedSession || !manualBookDate) return;
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('sessions').update({
-        is_booked: true,
-        last_booking_date: manualBookDate
-      }).eq('id', selectedSession.id);
-
-      if (error) throw error;
-      showToast(`تم الحجز بتاريخ ${manualBookDate}`, 'success');
-      
-      setSessions(prev => prev.map(s => 
+      const updatedSessions = sessions.map(s => 
         s.id === selectedSession.id 
           ? { ...s, isBooked: true, lastBookingDate: manualBookDate } 
           : s
-      ));
+      );
+      localStorage.setItem('sessions', JSON.stringify(updatedSessions));
+
+      showToast(`تم الحجز بتاريخ ${manualBookDate}`, 'success');
+      setSessions(updatedSessions);
       setIsBookDateModalOpen(false);
     } catch (err: any) {
       showToast(`فشل التحديث: ${err.message}`, 'error');
@@ -564,10 +507,11 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
   const confirmDeleteSession = async () => {
     if (!deleteConfirmSession) return;
     try {
-      const { error } = await supabase.from('sessions').delete().eq('id', deleteConfirmSession.id);
-      if (error) throw error;
+      const updatedSessions = sessions.filter(s => s.id !== deleteConfirmSession.id);
+      localStorage.setItem('sessions', JSON.stringify(updatedSessions));
+
       showToast('تم حذف الجلسة بنجاح', 'success');
-      setSessions(prev => prev.filter(s => s.id !== deleteConfirmSession.id));
+      setSessions(updatedSessions);
       setDeleteConfirmSession(null);
       
       if (selectedSession?.id === deleteConfirmSession.id) {
@@ -582,31 +526,17 @@ export default function SessionsManager({ onGoBack, showToast, loggedInUser, onS
   const handleUpdateCooldown = async () => {
     if (confirmationText.trim() === 'تأكيد') {
       try {
-        const basePayload = {
-          key: 'session_cooldown_days',
-          value: tempCooldownDays.toString(),
-          updated_at: new Date().toISOString()
-        };
-
-        let { error } = await supabase.from('app_settings').upsert({
-          ...basePayload,
-          updated_by: loggedInUser.username,
-        });
-
-        if (error) {
-           const msg = error.message.toLowerCase();
-           if (
-             msg.includes('updated_by') || 
-             msg.includes('schema cache') || 
-             msg.includes('column') ||
-             error.code === '42703'
-           ) {
-              const retry = await supabase.from('app_settings').upsert(basePayload);
-              error = retry.error;
-           }
+        const storedSettings = localStorage.getItem('app_settings');
+        let settings = storedSettings ? JSON.parse(storedSettings) : [];
+        
+        const existingIndex = settings.findIndex((s: any) => s.key === 'session_cooldown_days');
+        if (existingIndex > -1) {
+          settings[existingIndex] = { ...settings[existingIndex], value: tempCooldownDays.toString(), updated_at: new Date().toISOString(), updated_by: loggedInUser.username };
+        } else {
+          settings.push({ key: 'session_cooldown_days', value: tempCooldownDays.toString(), updated_at: new Date().toISOString(), updated_by: loggedInUser.username });
         }
-
-        if (error) throw error;
+        
+        localStorage.setItem('app_settings', JSON.stringify(settings));
 
         setActualCooldownDays(tempCooldownDays);
         setIsConfirmModalOpen(false);

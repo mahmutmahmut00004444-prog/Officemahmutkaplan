@@ -28,7 +28,6 @@ import TrashBin from './components/TrashBin';
 import UserActivityLog from './components/UserActivityLog'; 
 import UpdatePrompt from './components/UpdatePrompt';
 import OfficeReceipts from './components/OfficeReceipts'; 
-import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { formatCurrency } from './lib/formatCurrency';
 import { GoogleGenAI } from '@google/genai';
 
@@ -86,20 +85,7 @@ const App: React.FC = () => {
     setTimeout(() => setToast(null), 5000); 
   };
 
-  // --- Centralized Logging Function ---
-  const logActivity = async (actionType: 'LOGIN' | 'ADD' | 'DELETE' | 'RESTORE' | 'LOGOUT', description: string, overrideUser?: string) => {
-    if (!isSupabaseConfigured) return;
-    try {
-      await supabase.from('activity_logs').insert({
-        action_type: actionType,
-        description: description,
-        user_name: overrideUser || loggedInUser?.username || 'Unknown'
-      });
-    } catch (e) {
-      console.error("Failed to log activity", e);
-    }
-  };
-
+  // Helper to get simple device name
   const getDeviceInfo = () => {
     const ua = navigator.userAgent;
     let device = "Unknown";
@@ -120,31 +106,15 @@ const App: React.FC = () => {
 
   // Fetch Admin Password on Load
   useEffect(() => {
-    const fetchAdminPassword = async () => {
-      if (!isSupabaseConfigured) return;
-      try {
-        const { data, error } = await supabase
-          .from('app_settings')
-          .select('value')
-          .eq('key', 'admin_password')
-          .single();
-        
-        if (data && data.value) {
-          setAdminDynamicPassword(data.value);
-        } else {
-          await supabase.from('app_settings').upsert({
-             key: 'admin_password',
-             value: DEFAULT_ADMIN_PASSWORD,
-             updated_at: new Date().toISOString()
-          });
-        }
-      } catch (e) {
-        console.error("Failed to fetch admin password", e);
-      }
-    };
-    fetchAdminPassword();
+    const storedPass = localStorage.getItem('admin_password');
+    if (storedPass) {
+      setAdminDynamicPassword(storedPass);
+    } else {
+      localStorage.setItem('admin_password', DEFAULT_ADMIN_PASSWORD);
+    }
   }, []);
 
+  // Handle Admin Password Change
   const handleChangeAdminPassword = async (oldPass: string, newPass: string) => {
     if (oldPass !== adminDynamicPassword) {
       throw new Error("كلمة المرور الحالية غير صحيحة");
@@ -153,21 +123,9 @@ const App: React.FC = () => {
       throw new Error("كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل");
     }
 
-    try {
-      const { error } = await supabase.from('app_settings').upsert({
-        key: 'admin_password',
-        value: newPass,
-        updated_at: new Date().toISOString(),
-        updated_by: ADMIN_USERNAME
-      });
-
-      if (error) throw error;
-      
-      setAdminDynamicPassword(newPass);
-      showToast("تم تغيير كلمة مرور المدير بنجاح", "success");
-    } catch (err: any) {
-      throw new Error(err.message || "فشل التحديث في قاعدة البيانات");
-    }
+    localStorage.setItem('admin_password', newPass);
+    setAdminDynamicPassword(newPass);
+    showToast("تم تغيير كلمة مرور المدير بنجاح", "success");
   };
 
   useEffect(() => {
@@ -179,34 +137,8 @@ const App: React.FC = () => {
   }, [currentView, loggedInUser]);
 
   useEffect(() => {
-    if (loggedInUser && loggedInUser.role === 'OFFICE' && isSupabaseConfigured) {
-      const updateHeartbeat = async () => {
-        if (!loggedInUser.officeId) return;
-        try {
-          await supabase.from('office_users').update({ 
-            last_seen: new Date().toISOString(),
-            device_name: getDeviceInfo()
-          }).eq('id', loggedInUser.officeId);
-        } catch (e) { console.error("Heartbeat error", e); }
-      };
-
-      const checkLogoutStatus = async () => {
-        if (!loggedInUser.officeId) return;
-        const { data } = await supabase.from('office_users').select('force_logout').eq('id', loggedInUser.officeId).single();
-        if (data?.force_logout) {
-          await supabase.from('office_users').update({ force_logout: false }).eq('id', loggedInUser.officeId);
-          handleLogout();
-          alert('انتهت جلستك. تم تسجيل خروجك من قبل المسؤول.');
-        }
-      };
-
-      updateHeartbeat();
-      const interval = setInterval(() => {
-        updateHeartbeat();
-        checkLogoutStatus();
-      }, 20000); 
-
-      return () => clearInterval(interval);
+    if (loggedInUser && loggedInUser.role === 'OFFICE') {
+      // Heartbeat and logout checks removed as they depend on Supabase
     }
   }, [loggedInUser]);
 
@@ -269,6 +201,162 @@ const App: React.FC = () => {
     };
   }, [activeReviewers, activeOfficeRecords, loggedInUser, currentView]);
 
+  const handleLogin = async (usernameInput: string, passwordInput: string) => {
+    setLoginError(null); setIsLoading(true);
+    if (usernameInput === ADMIN_USERNAME && passwordInput === adminDynamicPassword) {
+      const user: LoggedInUser = { username: ADMIN_USERNAME, role: 'ADMIN' };
+      setLoggedInUser(user); localStorage.setItem('loggedInUser', JSON.stringify(user));
+      showToast('تم تسجيل الدخول كمدير'); setIsLoading(false); setCurrentView('FORM'); return;
+    }
+    
+    // Check local office users
+    const officeUser = allOfficeUsers.find(u => (u.office_name === usernameInput || u.username === usernameInput) && u.password === passwordInput);
+    if (officeUser) {
+      const user: LoggedInUser = { username: officeUser.office_name, role: 'OFFICE', officeId: officeUser.id };
+      setLoggedInUser(user); localStorage.setItem('loggedInUser', JSON.stringify(user));
+      showToast(`مرحباً بك: ${officeUser.office_name}`); setIsLoading(false); setCurrentView('OFFICE_ALL'); return;
+    } else {
+      setLoginError("اسم المستخدم أو كلمة المرور غير صحيحة");
+    }
+    setIsLoading(false);
+  };
+
+  const handleLogout = () => { setLoggedInUser(null); localStorage.removeItem('loggedInUser'); setCurrentView('ALL'); setViewHistory([]); setSessionStats(undefined); };
+
+  const fetchAllData = async (silent = false) => {
+    if (!loggedInUser) return;
+    if (!silent) setIsLoading(true); else setIsSyncing(true);
+    try {
+      const storedReviewers = localStorage.getItem('reviewers');
+      const storedOfficeUsers = localStorage.getItem('office_users');
+      const storedOfficeRecords = localStorage.getItem('office_records');
+      const storedSettlements = localStorage.getItem('office_settlements');
+      const storedSources = localStorage.getItem('booking_sources');
+      const storedSourceSettlements = localStorage.getItem('settlement_transactions');
+
+      if (storedReviewers) setReviewers(JSON.parse(storedReviewers));
+      if (storedOfficeUsers) setAllOfficeUsers(JSON.parse(storedOfficeUsers));
+      if (storedOfficeRecords) setOfficeRecords(JSON.parse(storedOfficeRecords));
+      if (storedSettlements) setOfficeSettlements(JSON.parse(storedSettlements));
+      if (storedSources) setBookingSources(JSON.parse(storedSources));
+      if (storedSourceSettlements) setSourceSettlements(JSON.parse(storedSourceSettlements));
+
+    } catch (e: any) { 
+      showToast(`فشل جلب البيانات: ${e.message}`, 'error'); 
+    } 
+    finally { setIsLoading(false); setIsSyncing(false); }
+  };
+
+  useEffect(() => { fetchAllData(); }, [loggedInUser]);
+
+  const handleToggleBooking = async (type: 'reviewer' | 'office', id: string, initialState: boolean, sourceId?: string | null, imageData?: string | null, bookingDate?: string | null) => {
+    try {
+      const isBooking = !initialState;
+      
+      if (type === 'reviewer') {
+        setReviewers(prev => {
+          const updated = prev.map(r => {
+            if (r.id === id) {
+              const payload: any = { ...r, isBooked: isBooking, bookedSourceId: sourceId || null };
+              if (isBooking) {
+                payload.bookingCreatedAt = new Date().getTime();
+                if (imageData) payload.bookingImage = imageData;
+                if (bookingDate) payload.bookingDate = bookingDate;
+              } else {
+                payload.bookingCreatedAt = undefined; payload.bookingImage = null; payload.bookingDate = null;
+                payload.isUploaded = false; payload.uploadedSourceId = null;
+              }
+              return payload;
+            }
+            return r;
+          });
+          localStorage.setItem('reviewers', JSON.stringify(updated));
+          return updated;
+        });
+      } else {
+        setOfficeRecords(prev => {
+          const updated = prev.map(r => {
+            if (r.id === id) {
+              const payload: any = { ...r, isBooked: isBooking, bookedSourceId: sourceId || null };
+              if (isBooking) {
+                payload.bookingCreatedAt = new Date().getTime();
+                if (imageData) payload.bookingImage = imageData;
+                if (bookingDate) payload.bookingDate = bookingDate;
+
+                const office = allOfficeUsers.find(u => u.office_name.trim() === r.affiliation.trim());
+                if (office) {
+                  payload.bookedPriceRightMosul = office.priceRightMosul || 0;
+                  payload.bookedPriceLeftMosul = office.priceLeftMosul || 0;
+                  payload.bookedPriceHammamAlAlil = office.priceHammamAlAlil || 0;
+                  payload.bookedPriceAlShoura = office.priceAlShoura || 0;
+                  payload.bookedPriceBaaj = office.priceBaaj || 0;
+                  payload.bookedPriceOthers = office.priceOthers || 0;
+                }
+              } else {
+                payload.bookingCreatedAt = undefined; payload.bookingImage = null; payload.bookingDate = null;
+                payload.bookedPriceRightMosul = 0; payload.bookedPriceLeftMosul = 0; payload.bookedPriceOthers = 0;
+                payload.bookedPriceHammamAlAlil = 0; payload.bookedPriceAlShoura = 0; payload.bookedPriceBaaj = 0;
+                payload.isUploaded = false; payload.uploadedSourceId = null;
+              }
+              return payload;
+            }
+            return r;
+          });
+          localStorage.setItem('office_records', JSON.stringify(updated));
+          return updated;
+        });
+      }
+
+      showToast(initialState ? 'تم إلغاء الحجز' : 'تم النقل وتثبيت السعر');
+    } catch (err) { showToast('فشل تحديث حالة الحجز', 'error'); }
+  };
+
+  const handleDeleteReceipt = async (id: string) => {
+    // Check if it exists in reviewers or officeRecords to determine type
+    const isReviewer = reviewers.some(r => r.id === id);
+    const type = isReviewer ? 'reviewer' : 'office';
+    
+    // Toggle booking state to false (initialState=true means currently booked, so flip to false)
+    await handleToggleBooking(type, id, true, null);
+  };
+
+  const handleImportBackup = async (data: any) => {
+    setIsLoading(true);
+    try {
+      if (data.reviewers) {
+        setReviewers(data.reviewers);
+        localStorage.setItem('reviewers', JSON.stringify(data.reviewers));
+      }
+      if (data.officeRecords) {
+        setOfficeRecords(data.officeRecords);
+        localStorage.setItem('office_records', JSON.stringify(data.officeRecords));
+      }
+      if (data.bookingSources) {
+        setBookingSources(data.bookingSources);
+        localStorage.setItem('booking_sources', JSON.stringify(data.bookingSources));
+      }
+      if (data.officeUsers) {
+        setAllOfficeUsers(data.officeUsers);
+        localStorage.setItem('office_users', JSON.stringify(data.officeUsers));
+      }
+      if (data.officeSettlements) {
+        setOfficeSettlements(data.officeSettlements);
+        localStorage.setItem('office_settlements', JSON.stringify(data.officeSettlements));
+      }
+      if (data.sourceSettlements) {
+        setSourceSettlements(data.sourceSettlements);
+        localStorage.setItem('settlement_transactions', JSON.stringify(data.sourceSettlements));
+      }
+      
+      showToast('تم استيراد كافة البيانات بنجاح', 'success');
+      setCurrentView(isAdmin ? 'ALL' : 'OFFICE_FORM');
+    } catch (e: any) {
+      showToast(`فشل الاستيراد: ${e.message}`, 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const onNavigate = (view: ViewType, data?: any) => {
     setViewHistory(prev => [...prev, { view: currentView, data: currentViewData }]);
     setCurrentView(view);
@@ -291,12 +379,11 @@ const App: React.FC = () => {
     if (!confirm('هل أنت متأكد من تصفير كافة السجلات؟ هذا الإجراء لا يمكن التراجع عنه.')) return;
     setIsLoading(true);
     try {
-      await supabase.from('reviewers').delete().neq('id', '0000'); // Delete all
-      await supabase.from('office_records').delete().neq('id', '0000');
-      // Possibly clear other tables too if full reset needed
-      showToast('تم تصفير النظام بنجاح', 'success');
       setReviewers([]);
       setOfficeRecords([]);
+      localStorage.removeItem('reviewers');
+      localStorage.removeItem('office_records');
+      showToast('تم تصفير النظام بنجاح', 'success');
     } catch (error: any) {
       showToast(`فشل التصفير: ${error.message}`, 'error');
     } finally {
@@ -304,262 +391,80 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogin = async (usernameInput: string, passwordInput: string) => {
-    setLoginError(null); setIsLoading(true);
-    if (usernameInput === ADMIN_USERNAME && passwordInput === adminDynamicPassword) {
-      const user: LoggedInUser = { username: ADMIN_USERNAME, role: 'ADMIN' };
-      setLoggedInUser(user); localStorage.setItem('loggedInUser', JSON.stringify(user));
-      
-      await logActivity('LOGIN', `تسجيل دخول المدير`);
-      
-      showToast('تم تسجيل الدخول كمدير'); setIsLoading(false); setCurrentView('FORM'); return;
-    }
-    if (isSupabaseConfigured) {
-      try {
-        const { data, error } = await supabase
-          .from('office_users')
-          .select('*')
-          .or(`office_name.eq."${usernameInput}",username.eq."${usernameInput}"`)
-          .eq('password', passwordInput)
-          .maybeSingle();
-
-        if (error) throw error;
-        if (data) {
-          const user: LoggedInUser = { username: data.office_name, role: 'OFFICE', officeId: data.id };
-          setLoggedInUser(user); localStorage.setItem('loggedInUser', JSON.stringify(user));
-          
-          const device = getDeviceInfo();
-          await supabase.from('office_users').update({ 
-            last_seen: new Date().toISOString(),
-            device_name: device,
-            force_logout: false 
-          }).eq('id', data.id);
-
-          await logActivity('LOGIN', `تسجيل دخول عبر جهاز: ${device}`, data.office_name);
-
-          showToast(`مرحباً بك: ${data.office_name}`); setIsLoading(false); setCurrentView('OFFICE_ALL'); return;
-        } else {
-          setLoginError("اسم المستخدم أو كلمة المرور غير صحيحة");
-        }
-      } catch (error: any) {
-        setLoginError(`فشل تسجيل الدخول: ${error.message}`);
-      }
-    }
-    setIsLoading(false);
-  };
-
-  const handleLogout = () => { 
-    if (loggedInUser) logActivity('LOGOUT', 'تسجيل الخروج');
-    setLoggedInUser(null); localStorage.removeItem('loggedInUser'); setCurrentView('ALL'); setViewHistory([]); setSessionStats(undefined); 
-  };
-
-  const fetchAllData = async (silent = false) => {
-    if (!loggedInUser || !isSupabaseConfigured) return;
-    if (isSyncing) return; // Prevent multiple simultaneous syncs
-    if (!silent) setIsLoading(true); else setIsSyncing(true);
+  const handleGenerateMockData = async () => {
+    setIsLoading(true);
     try {
-      const results = await Promise.allSettled([
-        supabase.from('reviewers').select('*').order('created_at', { ascending: true }),
-        supabase.from('office_users').select('*').order('office_name', { ascending: true }),
-        supabase.from('office_records').select('*').order('created_at', { ascending: true }),
-        supabase.from('office_settlements').select('*').order('transaction_date', { ascending: false }),
-        supabase.from('booking_sources').select('*').order('created_at', { ascending: true }),
-        supabase.from('settlement_transactions').select('*').order('transaction_date', { ascending: false }),
-        supabase.from('family_members').select('*'),
-        supabase.from('office_family_members').select('*')
-      ]);
+      const mockFamilies: OfficeRecord[] = [];
+      const firstNames = ["أحمد", "محمد", "علي", "حسين", "عمر", "زيد", "خالد", "ياسر", "مصطفى", "إبراهيم"];
+      const lastNames = ["العبيدي", "الجبوري", "الطائي", "الشمري", "الدليمي", "الساعدي", "الخفاجي", "المالكي", "الأسدي", "التميمي"];
+      const motherNames = ["فاطمة", "زينب", "مريم", "خديجة", "عائشة", "سارة", "ليلى", "نور", "هدى", "منى"];
+      const relationships = ["ابن", "ابنة", "زوجة", "أخ", "أخت"];
 
-      const [revResult, officeUsersResult, offResult, settlementsResult, sourcesResult, sourceSettlementsResult, familyMembersResult, officeFamilyMembersResult] = results.map(r => r.status === 'fulfilled' ? r.value : { data: [], error: r.reason });
-
-      const allFamilyMembers = familyMembersResult.data || [];
-      const allOfficeFamilyMembers = officeFamilyMembersResult.data || [];
-
-      setReviewers((revResult.data || []).map((rev: any) => ({
-        id: rev.id, circleType: rev.circle_type, headFullName: rev.head_full_name, headSurname: rev.head_surname,
-        headMotherName: rev.head_mother_name, headDob: rev.head_dob, headPhone: rev.head_phone,
-        paidAmount: rev.paid_amount, remainingAmount: rev.remaining_amount, notes: rev.notes,
-        bookingImage: rev.booking_image, bookingDate: rev.booking_date, 
-        bookingCreatedAt: rev.booking_created_at ? new Date(rev.booking_created_at).getTime() : undefined,
-        isBooked: rev.is_booked || false, isArchived: rev.is_archived || false,
-        bookedSourceId: rev.booked_source_id, isUploaded: rev.is_uploaded || false, uploadedSourceId: rev.uploaded_source_id, 
-        bookedPriceRightMosul: rev.booked_price_right_mosul || 0, bookedPriceLeftMosul: rev.booked_price_left_mosul || 0, 
-        bookedPriceOthers: rev.booked_price_others || 0, bookedPriceHammamAlAlil: rev.booked_price_hammam_alalil || 0,
-        bookedPriceAlShoura: rev.booked_price_alshoura || 0, bookedPriceBaaj: rev.booked_price_baaj || 0,
-        createdAt: new Date(rev.created_at).getTime(),
-        familyMembers: allFamilyMembers.filter((m: any) => m.reviewer_id === rev.id).map((m: any) => ({ id: m.id, relationship: m.relationship, fullName: m.full_name, surname: m.surname, motherName: m.mother_name, dob: m.dob }))
-      })));
-
-      setOfficeRecords((offResult.data || []).map((off: any) => ({
-        id: off.id, circleType: off.circle_type, headFullName: off.head_full_name, headSurname: off.head_surname,
-        headMotherName: off.head_mother_name, headDob: off.head_dob, headPhone: off.head_phone,
-        affiliation: off.affiliation, tableNumber: off.table_number, bookingImage: off.booking_image,
-        bookingDate: off.booking_date, 
-        bookingCreatedAt: off.booking_created_at ? new Date(off.booking_created_at).getTime() : undefined,
-        isBooked: off.is_booked || false, isArchived: off.is_archived || false,
-        bookedSourceId: off.booked_source_id, isUploaded: off.is_uploaded || false, uploadedSourceId: off.uploaded_source_id, 
-        bookedPriceRightMosul: off.booked_price_right_mosul || 0, bookedPriceLeftMosul: off.booked_price_left_mosul || 0, 
-        bookedPriceOthers: off.booked_price_others || 0, bookedPriceHammamAlAlil: off.booked_price_hammam_alalil || 0,
-        bookedPriceAlShoura: off.booked_price_alshoura || 0, bookedPriceBaaj: off.booked_price_baaj || 0,
-        createdAt: new Date(off.created_at).getTime(),
-        familyMembers: allOfficeFamilyMembers.filter((m: any) => m.office_record_id === off.id).map((m: any) => ({ id: m.id, relationship: m.relationship, fullName: m.full_name, surname: m.surname, motherName: m.mother_name, dob: m.dob }))
-      })));
-
-      setAllOfficeUsers((officeUsersResult.data || []).map((u: any) => ({
-        ...u, 
-        phone_number: u.phone_number, 
-        username: u.username || u.office_name,
-        last_seen: u.last_seen, 
-        device_name: u.device_name, 
-        priceRightMosul: u.price_right_mosul, 
-        priceLeftMosul: u.price_left_mosul,
-        priceHammamAlAlil: u.price_hammam_alalil, 
-        priceAlShoura: u.price_alshoura, 
-        priceBaaj: u.price_baaj, 
-        priceOthers: u.price_others
-      })));
-
-      setOfficeSettlements((settlementsResult.data || []).map((s: any) => ({
-        id: s.id, office_id: s.office_id, amount: s.amount, transaction_date: s.transaction_date, recorded_by: s.recorded_by, notes: s.notes
-      })));
-
-      setBookingSources((sourcesResult.data || []).map((s: any) => ({
-        id: s.id, sourceName: s.source_name, phoneNumber: s.phone_number,
-        priceRightMosul: s.price_right_mosul, priceLeftMosul: s.price_left_mosul,
-        priceOthers: s.price_others, priceHammamAlAlil: s.price_hammam_alalil,
-        priceAlShoura: s.price_alshoura, priceBaaj: s.price_baaj,
-        createdAt: new Date(s.created_at).getTime(), createdBy: s.created_by
-      })));
-
-      setSourceSettlements((sourceSettlementsResult.data || []).map((t: any) => ({
-        id: t.id, source_id: t.source_id, amount: parseFloat(t.amount),
-        transaction_date: new Date(t.transaction_date).getTime(), recorded_by: t.recorded_by, notes: t.notes
-      })));
-
-      if (silent) {
-        showToast('تم تحديث البيانات بنجاح', 'success');
-      }
-    } catch (e: any) { 
-      showToast(`فشل جلب البيانات: ${e.message}`, 'error'); 
-    } 
-    finally { setIsLoading(false); setIsSyncing(false); }
-  };
-
-  useEffect(() => { fetchAllData(); }, [loggedInUser]);
-
-  const handleToggleBooking = async (type: 'reviewer' | 'office', id: string, initialState: boolean, sourceId?: string | null, imageData?: string | null, bookingDate?: string | null) => {
-    try {
-      const table = type === 'reviewer' ? 'reviewers' : 'office_records';
-      const isBooking = !initialState;
-      const payload: any = { is_booked: isBooking, booked_source_id: sourceId || null };
-      
-      if (isBooking) {
-        payload.booking_created_at = new Date().toISOString();
-        if (imageData) payload.booking_image = imageData;
-        if (bookingDate) payload.booking_date = bookingDate;
-
-        if (type === 'office') {
-          const record = officeRecords.find(r => r.id === id);
-          if (record) {
-            const office = allOfficeUsers.find(u => u.office_name.trim() === record.affiliation.trim());
-            if (office) {
-              payload.booked_price_right_mosul = office.priceRightMosul || 0;
-              payload.booked_price_left_mosul = office.priceLeftMosul || 0;
-              payload.booked_price_hammam_alalil = office.priceHammamAlAlil || 0;
-              payload.booked_price_alshoura = office.priceAlShoura || 0;
-              payload.booked_price_baaj = office.priceBaaj || 0;
-              payload.booked_price_others = office.priceOthers || 0;
-            } else {
-              // ... zero prices
-              payload.booked_price_right_mosul = 0; payload.booked_price_left_mosul = 0; payload.booked_price_others = 0;
-              payload.booked_price_hammam_alalil = 0; payload.booked_price_alshoura = 0; payload.booked_price_baaj = 0;
-            }
-          }
+      for (let i = 1; i <= 50; i++) {
+        const headId = crypto.randomUUID();
+        const headFirstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+        const headLastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+        const headMotherName = motherNames[Math.floor(Math.random() * motherNames.length)];
+        
+        const familyMembersCount = Math.floor(Math.random() * 5); // 0 to 4 members
+        const familyMembers = [];
+        for (let j = 0; j < familyMembersCount; j++) {
+          familyMembers.push({
+            id: crypto.randomUUID(),
+            office_record_id: headId,
+            fullName: `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${headFirstName} ${headLastName}`,
+            motherName: motherNames[Math.floor(Math.random() * motherNames.length)],
+            dob: `19${Math.floor(Math.random() * 20) + 80}-0${Math.floor(Math.random() * 9) + 1}-1${Math.floor(Math.random() * 9) + 1}`,
+            relationship: relationships[Math.floor(Math.random() * relationships.length)],
+            surname: headLastName
+          });
         }
-      } else {
-        payload.booking_created_at = null; payload.booking_image = null; payload.booking_date = null;
-        payload.booked_price_right_mosul = 0; payload.booked_price_left_mosul = 0; payload.booked_price_others = 0;
-        payload.booked_price_hammam_alalil = 0; payload.booked_price_alshoura = 0; payload.booked_price_baaj = 0;
-        payload.is_uploaded = false; payload.uploaded_source_id = null;
+
+        mockFamilies.push({
+          id: headId,
+          circleType: Object.values(CircleType)[Math.floor(Math.random() * Object.values(CircleType).length)],
+          headFullName: `${headFirstName} ${firstNames[Math.floor(Math.random() * firstNames.length)]} ${headLastName}`,
+          headSurname: headLastName,
+          headMotherName: headMotherName,
+          headDob: `19${Math.floor(Math.random() * 30) + 60}-0${Math.floor(Math.random() * 9) + 1}-1${Math.floor(Math.random() * 9) + 1}`,
+          headPhone: `07${Math.floor(Math.random() * 90000000) + 10000000}`,
+          affiliation: allOfficeUsers.length > 0 ? allOfficeUsers[Math.floor(Math.random() * allOfficeUsers.length)].office_name : ADMIN_USERNAME,
+          createdAt: new Date().toISOString(),
+          familyMembers: familyMembers,
+          isUploaded: Math.random() > 0.5,
+          isBooked: Math.random() > 0.7
+        });
       }
 
-      await supabase.from(table).update(payload).eq('id', id);
-      showToast(initialState ? 'تم إلغاء الحجز' : 'تم النقل وتثبيت السعر');
-      await fetchAllData(true);
-    } catch (err) { showToast('فشل تحديث حالة الحجز', 'error'); }
-  };
-
-  const handleDeleteReceipt = async (id: string) => {
-    // Check if it exists in reviewers or officeRecords to determine type
-    const isReviewer = reviewers.some(r => r.id === id);
-    const type = isReviewer ? 'reviewer' : 'office';
-    
-    // Toggle booking state to false (initialState=true means currently booked, so flip to false)
-    await handleToggleBooking(type, id, true, null);
+      const updatedRecords = [...officeRecords, ...mockFamilies];
+      setOfficeRecords(updatedRecords);
+      localStorage.setItem('office_records', JSON.stringify(updatedRecords));
+      showToast('تم إضافة 50 عائلة افتراضية بنجاح');
+    } catch (err) {
+      showToast('فشل إضافة البيانات الافتراضية', 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const onSaveReviewer = async (reviewer: Reviewer) => {
     try {
-      const { familyMembers, createdAt, ...rest } = reviewer;
-      const isNew = !reviewers.some(r => r.id === reviewer.id);
-
-      const dbReviewer = {
-        id: rest.id,
-        circle_type: rest.circleType,
-        head_full_name: rest.headFullName,
-        head_surname: rest.headSurname,
-        head_mother_name: rest.headMotherName,
-        head_dob: rest.headDob,
-        head_phone: rest.headPhone,
-        paid_amount: rest.paidAmount ? parseFloat(rest.paidAmount) : 0,
-        remaining_amount: rest.remainingAmount ? parseFloat(rest.remainingAmount) : 0,
-        notes: rest.notes,
-        booking_image: rest.bookingImage,
-        booking_date: rest.bookingDate,
-        booking_created_at: rest.bookingCreatedAt ? new Date(rest.bookingCreatedAt).toISOString() : null,
-        is_booked: rest.isBooked,
-        is_archived: rest.isArchived,
-        booked_source_id: rest.bookedSourceId,
-        is_uploaded: rest.isUploaded,
-        uploaded_source_id: rest.uploadedSourceId,
-        booked_price_right_mosul: rest.bookedPriceRightMosul,
-        booked_price_left_mosul: rest.bookedPriceLeftMosul,
-        booked_price_others: rest.bookedPriceOthers,
-        booked_price_hammam_alalil: rest.bookedPriceHammamAlAlil,
-        booked_price_alshoura: rest.bookedPriceAlShoura,
-        booked_price_baaj: rest.bookedPriceBaaj,
-        created_at: new Date(createdAt).toISOString(),
-      };
-
-      const { error } = await supabase.from('reviewers').upsert(dbReviewer);
-      if (error) throw error;
-
-      // Handle members: delete old, insert new
-      await supabase.from('family_members').delete().eq('reviewer_id', reviewer.id);
-      if (familyMembers.length > 0) {
-        const dbMembers = familyMembers.map(m => ({
-          id: m.id,
-          reviewer_id: reviewer.id,
-          full_name: m.fullName,
-          relationship: m.relationship,
-          surname: m.surname,
-          mother_name: m.motherName,
-          dob: m.dob
-        }));
-        const { error: insertError } = await supabase.from('family_members').insert(dbMembers);
-        if (insertError) throw insertError;
-      }
+      setReviewers(prev => {
+        const index = prev.findIndex(r => r.id === reviewer.id);
+        let updated;
+        if (index > -1) {
+          updated = [...prev];
+          updated[index] = reviewer;
+        } else {
+          updated = [...prev, reviewer];
+        }
+        localStorage.setItem('reviewers', JSON.stringify(updated));
+        return updated;
+      });
       
-      if (isNew) {
-        await logActivity('ADD', `إضافة مراجع جديد: ${reviewer.headFullName}`);
-      }
-
       showToast('تم حفظ السجل بنجاح', 'success');
-      await fetchAllData(true);
-      
-      if(editingReviewer) {
-        setEditingReviewer(null);
-        setCurrentView('ALL');
-      }
+      if(editingReviewer) setEditingReviewer(null);
+      setCurrentView('ALL');
     } catch (e: any) {
       throw e;
     }
@@ -567,65 +472,22 @@ const App: React.FC = () => {
 
   const onSaveOfficeRecord = async (record: OfficeRecord) => {
     try {
-        const { familyMembers, createdAt, ...rest } = record;
-        const isNew = !officeRecords.some(r => r.id === record.id);
-
-        const dbRecord = {
-            id: record.id,
-            circle_type: record.circleType,
-            head_full_name: record.headFullName,
-            head_surname: record.headSurname,
-            head_mother_name: record.headMotherName,
-            head_dob: record.headDob,
-            head_phone: record.headPhone,
-            affiliation: record.affiliation,
-            table_number: record.tableNumber,
-            booking_image: record.bookingImage,
-            booking_date: record.bookingDate,
-            booking_created_at: record.bookingCreatedAt ? new Date(record.bookingCreatedAt).toISOString() : null,
-            is_booked: record.isBooked,
-            is_archived: record.isArchived,
-            booked_source_id: record.bookedSourceId,
-            is_uploaded: record.isUploaded,
-            uploaded_source_id: record.uploadedSourceId,
-            booked_price_right_mosul: record.bookedPriceRightMosul,
-            booked_price_left_mosul: record.bookedPriceLeftMosul,
-            booked_price_others: record.bookedPriceOthers,
-            booked_price_hammam_alalil: record.bookedPriceHammamAlAlil,
-            booked_price_alshoura: record.bookedPriceAlShoura,
-            booked_price_baaj: record.bookedPriceBaaj,
-            created_at: new Date(record.createdAt).toISOString()
-        };
-
-        const { error } = await supabase.from('office_records').upsert(dbRecord);
-        if (error) throw error;
-
-        await supabase.from('office_family_members').delete().eq('office_record_id', record.id);
-        if (familyMembers.length > 0) {
-            const dbMembers = familyMembers.map(m => ({
-                id: m.id,
-                office_record_id: record.id,
-                full_name: m.fullName,
-                relationship: m.relationship,
-                surname: m.surname,
-                mother_name: m.motherName,
-                dob: m.dob
-            }));
-            const { error: insertError } = await supabase.from('office_family_members').insert(dbMembers);
-            if (insertError) throw insertError;
-        }
-
-        if (isNew) {
-            await logActivity('ADD', `إضافة مراجع (مكتب): ${record.headFullName}`);
-        }
+        setOfficeRecords(prev => {
+          const index = prev.findIndex(r => r.id === record.id);
+          let updated;
+          if (index > -1) {
+            updated = [...prev];
+            updated[index] = record;
+          } else {
+            updated = [...prev, record];
+          }
+          localStorage.setItem('office_records', JSON.stringify(updated));
+          return updated;
+        });
 
         showToast('تم حفظ سجل المكتب بنجاح', 'success');
-        await fetchAllData(true);
-        
-        if(editingOffice) {
-            setEditingOffice(null);
-            setCurrentView('OFFICE_ALL');
-        }
+        if(editingOffice) setEditingOffice(null);
+        if (isAdmin) setCurrentView('OFFICE_ALL');
     } catch (e: any) {
         console.error("Failed to save office record:", e);
         throw e;
@@ -636,18 +498,25 @@ const App: React.FC = () => {
     try {
         const reviewer = reviewers.find(r => r.id === id);
         if (reviewer) {
-            await supabase.from('recycle_bin').insert({
+            const trashItem: RecycleBinItem = {
+                id: crypto.randomUUID(),
                 original_id: reviewer.id,
                 record_type: 'reviewer',
                 full_name: reviewer.headFullName,
                 deleted_by: loggedInUser?.username || 'Unknown',
+                deleted_at: new Date().toISOString(),
                 original_data: reviewer
-            });
-            await logActivity('DELETE', `حذف مراجع: ${reviewer.headFullName}`);
+            };
+            const storedTrash = localStorage.getItem('recycle_bin');
+            const trash = storedTrash ? JSON.parse(storedTrash) : [];
+            localStorage.setItem('recycle_bin', JSON.stringify([trashItem, ...trash]));
         }
-        await supabase.from('reviewers').delete().eq('id', id);
+        setReviewers(prev => {
+          const updated = prev.filter(r => r.id !== id);
+          localStorage.setItem('reviewers', JSON.stringify(updated));
+          return updated;
+        });
         showToast('تم حذف السجل', 'success');
-        fetchAllData(true);
     } catch (e: any) {
         showToast(`فشل الحذف: ${e.message}`, 'error');
     }
@@ -657,31 +526,57 @@ const App: React.FC = () => {
     try {
         const record = officeRecords.find(r => r.id === id);
         if (record) {
-            await supabase.from('recycle_bin').insert({
+            const trashItem: RecycleBinItem = {
+                id: crypto.randomUUID(),
                 original_id: record.id,
                 record_type: 'office',
                 full_name: record.headFullName,
                 deleted_by: loggedInUser?.username || 'Unknown',
+                deleted_at: new Date().toISOString(),
                 original_data: record
-            });
-            await logActivity('DELETE', `حذف سجل مكتب: ${record.headFullName}`);
+            };
+            const storedTrash = localStorage.getItem('recycle_bin');
+            const trash = storedTrash ? JSON.parse(storedTrash) : [];
+            localStorage.setItem('recycle_bin', JSON.stringify([trashItem, ...trash]));
         }
-        await supabase.from('office_records').delete().eq('id', id);
+        setOfficeRecords(prev => {
+          const updated = prev.filter(r => r.id !== id);
+          localStorage.setItem('office_records', JSON.stringify(updated));
+          return updated;
+        });
         showToast('تم حذف سجل المكتب', 'success');
-        fetchAllData(true);
     } catch (e: any) {
         showToast(`فشل الحذف: ${e.message}`, 'error');
     }
   };
 
   const onDeleteMember = async (recordId: string, memberId: string) => {
-    // Check if reviewer or office record
     const isReviewer = reviewers.some(r => r.id === recordId);
-    const table = isReviewer ? 'family_members' : 'office_family_members';
     try {
-        await supabase.from(table).delete().eq('id', memberId);
+        if (isReviewer) {
+          setReviewers(prev => {
+            const updated = prev.map(r => {
+              if (r.id === recordId) {
+                return { ...r, familyMembers: r.familyMembers.filter(m => m.id !== memberId) };
+              }
+              return r;
+            });
+            localStorage.setItem('reviewers', JSON.stringify(updated));
+            return updated;
+          });
+        } else {
+          setOfficeRecords(prev => {
+            const updated = prev.map(r => {
+              if (r.id === recordId) {
+                return { ...r, familyMembers: r.familyMembers.filter(m => m.id !== memberId) };
+              }
+              return r;
+            });
+            localStorage.setItem('office_records', JSON.stringify(updated));
+            return updated;
+          });
+        }
         showToast('تم حذف الفرد', 'success');
-        fetchAllData(true);
     } catch (e: any) {
         showToast(`فشل حذف الفرد: ${e.message}`, 'error');
     }
@@ -689,17 +584,24 @@ const App: React.FC = () => {
 
   const onToggleUploadStatus = async (id: string, currentState: boolean, currentSourceId: string | null) => {
     const isReviewer = reviewers.some(r => r.id === id);
-    const table = isReviewer ? 'reviewers' : 'office_records';
     const newStatus = !currentState;
     
     try {
-        await supabase.from(table).update({ 
-            is_uploaded: newStatus,
-            uploaded_source_id: newStatus ? currentSourceId : null 
-        }).eq('id', id);
+        if (isReviewer) {
+          setReviewers(prev => {
+            const updated = prev.map(r => r.id === id ? { ...r, isUploaded: newStatus, uploadedSourceId: newStatus ? currentSourceId : null } : r);
+            localStorage.setItem('reviewers', JSON.stringify(updated));
+            return updated;
+          });
+        } else {
+          setOfficeRecords(prev => {
+            const updated = prev.map(r => r.id === id ? { ...r, isUploaded: newStatus, uploadedSourceId: newStatus ? currentSourceId : null } : r);
+            localStorage.setItem('office_records', JSON.stringify(updated));
+            return updated;
+          });
+        }
         
         showToast(newStatus ? 'تم تغيير الحالة إلى مرفوع' : 'تم إلغاء حالة الرفع', 'success');
-        fetchAllData(true);
     } catch (e: any) {
         showToast(`فشل التحديث: ${e.message}`, 'error');
     }
@@ -713,14 +615,20 @@ const App: React.FC = () => {
 
   const handleSettleOffice = async (officeId: string, amount: number, notes: string) => {
     try {
-        await supabase.from('office_settlements').insert({
+        const newSettlement = {
+            id: crypto.randomUUID(),
             office_id: officeId,
             amount,
             notes,
-            recorded_by: loggedInUser?.username
+            recorded_by: loggedInUser?.username,
+            transaction_date: new Date().toISOString()
+        };
+        setOfficeSettlements(prev => {
+          const updated = [newSettlement, ...prev];
+          localStorage.setItem('office_settlements', JSON.stringify(updated));
+          return updated;
         });
         showToast('تم تسجيل الدفعة بنجاح', 'success');
-        fetchAllData(true);
     } catch (e: any) {
         showToast(`فشل التسجيل: ${e.message}`, 'error');
     }
@@ -728,14 +636,20 @@ const App: React.FC = () => {
 
   const handleSettleSource = async (sourceId: string, amount: number, notes?: string) => {
     try {
-        await supabase.from('settlement_transactions').insert({
+        const newSettlement = {
+            id: crypto.randomUUID(),
             source_id: sourceId,
             amount,
-            notes,
-            recorded_by: loggedInUser?.username
+            notes: notes || '',
+            recorded_by: loggedInUser?.username || '',
+            transaction_date: new Date().getTime()
+        };
+        setSourceSettlements(prev => {
+          const updated = [newSettlement, ...prev];
+          localStorage.setItem('settlement_transactions', JSON.stringify(updated));
+          return updated;
         });
         showToast('تم تسجيل التسديد للمصدر', 'success');
-        fetchAllData(true);
     } catch (e: any) {
         showToast(`فشل التسديد: ${e.message}`, 'error');
     }
@@ -743,11 +657,17 @@ const App: React.FC = () => {
 
   const onBulkToggleUploadStatus = async (ids: string[], status: boolean, sourceId?: string | null) => {
     try {
-        // Try update both tables
-        await supabase.from('reviewers').update({ is_uploaded: status, uploaded_source_id: sourceId || null }).in('id', ids);
-        await supabase.from('office_records').update({ is_uploaded: status, uploaded_source_id: sourceId || null }).in('id', ids);
+        setReviewers(prev => {
+          const updated = prev.map(r => ids.includes(r.id) ? { ...r, isUploaded: status, uploadedSourceId: status ? (sourceId || null) : null } : r);
+          localStorage.setItem('reviewers', JSON.stringify(updated));
+          return updated;
+        });
+        setOfficeRecords(prev => {
+          const updated = prev.map(r => ids.includes(r.id) ? { ...r, isUploaded: status, uploadedSourceId: status ? (sourceId || null) : null } : r);
+          localStorage.setItem('office_records', JSON.stringify(updated));
+          return updated;
+        });
         showToast(`تم تحديث ${ids.length} سجل`, 'success');
-        fetchAllData(true);
     } catch (e: any) {
         showToast(`فشل التحديث الجماعي: ${e.message}`, 'error');
     }
@@ -755,11 +675,17 @@ const App: React.FC = () => {
 
   const onBulkDelete = async (ids: string[]) => {
     try {
-        // Move to trash logic for bulk? Skipping for brevity, direct delete
-        await supabase.from('reviewers').delete().in('id', ids);
-        await supabase.from('office_records').delete().in('id', ids);
+        setReviewers(prev => {
+          const updated = prev.filter(r => !ids.includes(r.id));
+          localStorage.setItem('reviewers', JSON.stringify(updated));
+          return updated;
+        });
+        setOfficeRecords(prev => {
+          const updated = prev.filter(r => !ids.includes(r.id));
+          localStorage.setItem('office_records', JSON.stringify(updated));
+          return updated;
+        });
         showToast(`تم حذف ${ids.length} سجل`, 'success');
-        fetchAllData(true);
     } catch (e: any) {
         showToast(`فشل الحذف الجماعي: ${e.message}`, 'error');
     }
@@ -767,198 +693,34 @@ const App: React.FC = () => {
 
   const handleRestoreFromTrash = async (item: RecycleBinItem) => {
       try {
-          const table = item.record_type === 'reviewer' ? 'reviewers' : 'office_records';
-          const { original_data } = item;
-          // Clean data before insert
-          const { familyMembers, ...rest } = original_data;
+          const { original_data, record_type } = item;
           
-          const mapToDb = (d: any) => ({
-             id: d.id,
-             circle_type: d.circleType || d.circle_type,
-             head_full_name: d.headFullName || d.head_full_name,
-             head_surname: d.headSurname || d.head_surname,
-             head_mother_name: d.headMotherName || d.head_mother_name,
-             head_dob: d.headDob || d.head_dob,
-             head_phone: d.headPhone || d.head_phone,
-             affiliation: d.affiliation,
-             // ... map other fields as needed
-             created_at: new Date().toISOString() 
-          });
-
-          await supabase.from(table).upsert(mapToDb(rest));
+          if (record_type === 'reviewer') {
+            setReviewers(prev => {
+              const updated = [...prev, original_data];
+              localStorage.setItem('reviewers', JSON.stringify(updated));
+              return updated;
+            });
+          } else {
+            setOfficeRecords(prev => {
+              const updated = [...prev, original_data];
+              localStorage.setItem('office_records', JSON.stringify(updated));
+              return updated;
+            });
+          }
           
-          // Restore members...
           // Delete from recycle bin
-          await supabase.from('recycle_bin').delete().eq('id', item.id);
+          const storedTrash = localStorage.getItem('recycle_bin');
+          if (storedTrash) {
+            const trash = JSON.parse(storedTrash).filter((i: any) => i.id !== item.id);
+            localStorage.setItem('recycle_bin', JSON.stringify(trash));
+          }
           
-          await logActivity('RESTORE', `استرجاع سجل: ${item.full_name}`);
-
           showToast('تم استرجاع السجل', 'success');
           fetchAllData(true);
       } catch (e: any) {
           showToast(`فشل الاسترجاع: ${e.message}`, 'error');
       }
-  };
-
-  const handleImportBackup = async (data: any) => {
-    setIsLoading(true);
-    try {
-      // 1. System Configs & Sources first
-      if (data.bookingSources && data.bookingSources.length > 0) {
-         const { error } = await supabase.from('booking_sources').upsert(data.bookingSources);
-         if (error) console.error("Error importing sources", error);
-      }
-      
-      if (data.officeUsers && data.officeUsers.length > 0) {
-         const { error } = await supabase.from('office_users').upsert(data.officeUsers);
-         if (error) console.error("Error importing office users", error);
-      }
-
-      if (data.devices && data.devices.length > 0) {
-         const { error } = await supabase.from('devices').upsert(data.devices);
-         if (error) console.error("Error importing devices", error);
-      }
-
-      // 2. Main Records (Reviewers)
-      if (data.reviewers && data.reviewers.length > 0) {
-        for (const r of data.reviewers) {
-          const { familyMembers, ...rest } = r;
-          const dbReviewer: any = { ...rest };
-          if (typeof dbReviewer.createdAt === 'number') dbReviewer.created_at = new Date(dbReviewer.createdAt).toISOString();
-          if (dbReviewer.bookingCreatedAt) dbReviewer.booking_created_at = new Date(dbReviewer.bookingCreatedAt).toISOString();
-          
-          delete dbReviewer.familyMembers;
-          delete dbReviewer.createdAt;
-          delete dbReviewer.bookingCreatedAt;
-
-          const mappedReviewer = {
-             id: dbReviewer.id,
-             circle_type: dbReviewer.circleType,
-             head_full_name: dbReviewer.headFullName,
-             head_surname: dbReviewer.headSurname,
-             head_mother_name: dbReviewer.headMotherName,
-             head_dob: dbReviewer.headDob,
-             head_phone: dbReviewer.headPhone,
-             paid_amount: dbReviewer.paidAmount || 0,
-             remaining_amount: dbReviewer.remainingAmount || 0,
-             notes: dbReviewer.notes,
-             booking_image: dbReviewer.bookingImage,
-             booking_date: dbReviewer.bookingDate,
-             booking_created_at: dbReviewer.booking_created_at,
-             is_booked: dbReviewer.isBooked,
-             is_archived: dbReviewer.isArchived,
-             booked_source_id: dbReviewer.bookedSourceId,
-             is_uploaded: dbReviewer.isUploaded,
-             uploaded_source_id: dbReviewer.uploadedSourceId,
-             booked_price_right_mosul: dbReviewer.bookedPriceRightMosul,
-             booked_price_left_mosul: dbReviewer.bookedPriceLeftMosul,
-             booked_price_others: dbReviewer.bookedPriceOthers,
-             booked_price_hammam_alalil: dbReviewer.bookedPriceHammamAlAlil,
-             booked_price_alshoura: dbReviewer.bookedPriceAlShoura,
-             booked_price_baaj: dbReviewer.bookedPriceBaaj,
-             created_at: dbReviewer.created_at || new Date().toISOString()
-          };
-
-          await supabase.from('reviewers').upsert(mappedReviewer);
-
-          if (familyMembers && familyMembers.length > 0) {
-            await supabase.from('family_members').delete().eq('reviewer_id', r.id);
-            const dbMembers = familyMembers.map((m: any) => ({
-              id: m.id,
-              reviewer_id: r.id,
-              full_name: m.fullName,
-              relationship: m.relationship,
-              surname: m.surname,
-              mother_name: m.motherName,
-              dob: m.dob
-            }));
-            await supabase.from('family_members').insert(dbMembers);
-          }
-        }
-      }
-
-      // 3. Office Records
-      if (data.officeRecords && data.officeRecords.length > 0) {
-        for (const o of data.officeRecords) {
-          const { familyMembers, ...rest } = o;
-          
-          const dbRecord: any = { ...rest };
-          if (typeof dbRecord.createdAt === 'number') dbRecord.created_at = new Date(dbRecord.createdAt).toISOString();
-          if (dbRecord.bookingCreatedAt) dbRecord.booking_created_at = new Date(dbRecord.bookingCreatedAt).toISOString();
-          
-          delete dbRecord.familyMembers;
-          delete dbRecord.createdAt;
-          delete dbRecord.bookingCreatedAt;
-
-          const mappedRecord = {
-             id: dbRecord.id,
-             circle_type: dbRecord.circleType,
-             head_full_name: dbRecord.headFullName,
-             head_surname: dbRecord.headSurname,
-             head_mother_name: dbRecord.headMotherName,
-             head_dob: dbRecord.headDob,
-             head_phone: dbRecord.headPhone,
-             affiliation: dbRecord.affiliation,
-             table_number: dbRecord.tableNumber,
-             booking_image: dbRecord.bookingImage,
-             booking_date: dbRecord.bookingDate,
-             booking_created_at: dbRecord.booking_created_at,
-             is_booked: dbRecord.isBooked,
-             is_archived: dbRecord.isArchived,
-             booked_source_id: dbRecord.bookedSourceId,
-             is_uploaded: dbRecord.isUploaded,
-             uploaded_source_id: dbRecord.uploadedSourceId,
-             booked_price_right_mosul: dbRecord.bookedPriceRightMosul,
-             booked_price_left_mosul: dbRecord.bookedPriceLeftMosul,
-             booked_price_others: dbRecord.bookedPriceOthers,
-             booked_price_hammam_alalil: dbRecord.bookedPriceHammamAlAlil,
-             booked_price_alshoura: dbRecord.bookedPriceAlShoura,
-             booked_price_baaj: dbRecord.bookedPriceBaaj,
-             created_at: dbRecord.created_at || new Date().toISOString()
-          };
-
-          await supabase.from('office_records').upsert(mappedRecord);
-
-          if (familyMembers && familyMembers.length > 0) {
-            await supabase.from('office_family_members').delete().eq('office_record_id', o.id);
-            const dbMembers = familyMembers.map((m: any) => ({
-              id: m.id,
-              office_record_id: o.id,
-              full_name: m.fullName,
-              relationship: m.relationship,
-              surname: m.surname,
-              mother_name: m.motherName,
-              dob: m.dob
-            }));
-            await supabase.from('office_family_members').insert(dbMembers);
-          }
-        }
-      }
-
-      // 4. Financial Records
-      if (data.officeSettlements && data.officeSettlements.length > 0) {
-         const { error } = await supabase.from('office_settlements').upsert(data.officeSettlements);
-         if(error) console.error("Settlements error", error);
-      }
-      if (data.sourceSettlements && data.sourceSettlements.length > 0) {
-         const { error } = await supabase.from('settlement_transactions').upsert(data.sourceSettlements);
-         if(error) console.error("Source settlements error", error);
-      }
-
-      // 5. Sessions
-      if (data.sessions && data.sessions.length > 0) {
-         const { error } = await supabase.from('sessions').upsert(data.sessions);
-         if(error) console.error("Sessions error", error);
-      }
-      
-      showToast('تم استيراد كافة البيانات بنجاح', 'success');
-      await fetchAllData(true);
-      setCurrentView(isAdmin ? 'ALL' : 'OFFICE_FORM');
-    } catch (e: any) {
-      showToast(`فشل الاستيراد: ${e.message}`, 'error');
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   if (!loggedInUser) return <LoginScreen onLogin={handleLogin} errorMessage={loginError} isLoading={isLoading} />;
@@ -967,7 +729,7 @@ const App: React.FC = () => {
     <div className="flex flex-col min-h-screen bg-slate-50 font-cairo text-right" dir="rtl">
       <Navbar 
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} 
-        onRefresh={() => fetchAllData(true)} 
+        onRefresh={() => fetchAllData()} 
         isSyncing={isSyncing} 
         loggedInUser={loggedInUser}
         onLogout={handleLogout}
@@ -1101,8 +863,38 @@ const App: React.FC = () => {
                   officeRecords={officeRecords} 
                   bookingSources={bookingSources}
                   onGoBack={onGoBack} 
-                  onUnarchive={async (type, id) => { await supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').update({ is_archived: false }).eq('id', id); showToast('تم استرجاع السجل', 'success'); await fetchAllData(true); }}
-                  onDelete={async (type, id) => { await supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').delete().eq('id', id); showToast('تم الحذف النهائي', 'success'); await fetchAllData(true); }}
+                  onUnarchive={async (type, id) => { 
+                    if (type === 'reviewer') {
+                      setReviewers(prev => {
+                        const updated = prev.map(r => r.id === id ? { ...r, isArchived: false } : r);
+                        localStorage.setItem('reviewers', JSON.stringify(updated));
+                        return updated;
+                      });
+                    } else {
+                      setOfficeRecords(prev => {
+                        const updated = prev.map(r => r.id === id ? { ...r, isArchived: false } : r);
+                        localStorage.setItem('office_records', JSON.stringify(updated));
+                        return updated;
+                      });
+                    }
+                    showToast('تم استرجاع السجل', 'success'); 
+                  }}
+                  onDelete={async (type, id) => { 
+                    if (type === 'reviewer') {
+                      setReviewers(prev => {
+                        const updated = prev.filter(r => r.id !== id);
+                        localStorage.setItem('reviewers', JSON.stringify(updated));
+                        return updated;
+                      });
+                    } else {
+                      setOfficeRecords(prev => {
+                        const updated = prev.filter(r => r.id !== id);
+                        localStorage.setItem('office_records', JSON.stringify(updated));
+                        return updated;
+                      });
+                    }
+                    showToast('تم الحذف النهائي', 'success'); 
+                  }}
                   loggedInUser={loggedInUser}
                   formatCurrency={formatCurrency}
                 />
@@ -1114,7 +906,22 @@ const App: React.FC = () => {
                   onGoBack={onGoBack} 
                   onUnbook={(type, id) => handleToggleBooking(type, id, true, null)} // Reverse booking
                   onDelete={(type, id) => onDeleteReviewer(id)} // Generalized delete
-                  onArchive={async (type, id) => { await supabase.from(type === 'reviewer' ? 'reviewers' : 'office_records').update({ is_archived: true }).eq('id', id); showToast('تمت الأرشفة', 'success'); await fetchAllData(true); }}
+                  onArchive={async (type, id) => { 
+                    if (type === 'reviewer') {
+                      setReviewers(prev => {
+                        const updated = prev.map(r => r.id === id ? { ...r, isArchived: true } : r);
+                        localStorage.setItem('reviewers', JSON.stringify(updated));
+                        return updated;
+                      });
+                    } else {
+                      setOfficeRecords(prev => {
+                        const updated = prev.map(r => r.id === id ? { ...r, isArchived: true } : r);
+                        localStorage.setItem('office_records', JSON.stringify(updated));
+                        return updated;
+                      });
+                    }
+                    showToast('تمت الأرشفة', 'success'); 
+                  }}
                   loggedInUser={loggedInUser}
                 />
             ) : currentView === 'SETTINGS' ? (
@@ -1124,6 +931,7 @@ const App: React.FC = () => {
                   onGoBack={onGoBack}
                   loggedInUser={loggedInUser}
                   onChangeAdminPassword={handleChangeAdminPassword}
+                  onGenerateMockData={handleGenerateMockData}
                 />
             ) : currentView === 'OFFICE_STATEMENT' && currentViewData ? (
                 <OfficeStatement 
@@ -1160,6 +968,7 @@ const App: React.FC = () => {
                   loggedInUser={loggedInUser}
                   fetchAllData={fetchAllData}
                   bookingSources={bookingSources}
+                  settlementTransactions={settlementTransactions}
                   allReviewers={reviewers}
                   allOfficeRecords={officeRecords}
                   onViewAccountStatement={(source, tab) => {
@@ -1170,10 +979,20 @@ const App: React.FC = () => {
                   onOpenAddBookingToSourcePage={(source) => onNavigate('ADD_BOOKING_TO_SOURCE', source)}
                   onOpenSettleSourcePage={(source, balance) => onNavigate('SETTLE_SOURCE', { source, balance })}
                   onRemoveBookingFromSource={async (id, srcId, type) => {
-                      const table = type === 'reviewer' ? 'reviewers' : 'office_records';
-                      await supabase.from(table).update({ booked_source_id: null }).eq('id', id);
+                      if (type === 'reviewer') {
+                        setReviewers(prev => {
+                          const updated = prev.map(r => r.id === id ? { ...r, bookedSourceId: null } : r);
+                          localStorage.setItem('reviewers', JSON.stringify(updated));
+                          return updated;
+                        });
+                      } else {
+                        setOfficeRecords(prev => {
+                          const updated = prev.map(r => r.id === id ? { ...r, bookedSourceId: null } : r);
+                          localStorage.setItem('office_records', JSON.stringify(updated));
+                          return updated;
+                        });
+                      }
                       showToast('تم إلغاء الارتباط', 'success');
-                      fetchAllData(true);
                   }}
                   onGoBack={onGoBack}
                 />
@@ -1196,6 +1015,7 @@ const App: React.FC = () => {
                   loggedInUser={loggedInUser}
                   onSettlePayment={handleSettleSource}
                   formatCurrency={formatCurrency}
+                  transactions={settlementTransactions.filter(t => t.source_id === currentViewData.source.id)}
                 />
             ) : currentView === 'SESSIONS' ? (
                 <SessionsManager 
@@ -1243,11 +1063,22 @@ const App: React.FC = () => {
                 defaultTab={sourceStatementTab}
                 showToast={showToast}
                 formatCurrency={formatCurrency}
+                settlementTransactions={settlementTransactions.filter(t => t.source_id === selectedSourceForAction?.id)}
                 onRemoveBookingFromSource={async (id, srcId, type) => {
-                    const table = type === 'reviewer' ? 'reviewers' : 'office_records';
-                    await supabase.from(table).update({ booked_source_id: null }).eq('id', id);
+                    if (type === 'reviewer') {
+                      setReviewers(prev => {
+                        const updated = prev.map(r => r.id === id ? { ...r, bookedSourceId: null } : r);
+                        localStorage.setItem('reviewers', JSON.stringify(updated));
+                        return updated;
+                      });
+                    } else {
+                      setOfficeRecords(prev => {
+                        const updated = prev.map(r => r.id === id ? { ...r, bookedSourceId: null } : r);
+                        localStorage.setItem('office_records', JSON.stringify(updated));
+                        return updated;
+                      });
+                    }
                     showToast('تم إلغاء الارتباط', 'success');
-                    fetchAllData(true);
                 }}
               />
             )}

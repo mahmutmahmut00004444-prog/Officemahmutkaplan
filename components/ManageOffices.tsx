@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { OfficeUser, LoggedInUser, CIRCLE_NAMES, CircleType } from '../types';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import ContextMenuModal, { ContextMenuItem } from './ContextMenuModal'; 
 import { formatCurrency } from '../lib/formatCurrency';
 
@@ -97,20 +96,27 @@ const ManageOffices: React.FC<ManageOfficesProps> = ({ showToast, loggedInUser, 
     }
     setSubmittingNewOffice(true);
     try {
-      const { error } = await supabase.from('office_users').insert({
+      const newOffice: OfficeUser = {
+        id: crypto.randomUUID(),
         office_name: newOfficeName.trim(),
-        username: newOfficeUsername.trim(), // الحقل الجديد
+        username: newOfficeUsername.trim(),
         password: newOfficePassword.trim(),
         phone_number: newOfficePhone.trim(),
         created_by: loggedInUser.username,
-        price_right_mosul: Number(newPriceRightMosul) || 0,
-        price_left_mosul: Number(newPriceLeftMosul) || 0,
-        price_hammam_alalil: Number(newPriceHammamAlAlil) || 0,
-        price_alshoura: Number(newPriceAlShoura) || 0,
-        price_baaj: Number(newPriceBaaj) || 0,
-        price_others: Number(newPriceOthers) || 0,
-      });
-      if (error) throw error;
+        priceRightMosul: Number(newPriceRightMosul) || 0,
+        priceLeftMosul: Number(newPriceLeftMosul) || 0,
+        priceHammamAlAlil: Number(newPriceHammamAlAlil) || 0,
+        priceAlShoura: Number(newPriceAlShoura) || 0,
+        priceBaaj: Number(newPriceBaaj) || 0,
+        priceOthers: Number(newPriceOthers) || 0,
+        role: 'OFFICE',
+        force_logout: false
+      };
+
+      const storedUsers = localStorage.getItem('office_users');
+      const allUsers = storedUsers ? JSON.parse(storedUsers) : [];
+      localStorage.setItem('office_users', JSON.stringify([...allUsers, newOffice]));
+
       showToast('تم إنشاء المكتب بنجاح', 'success');
       setNewOfficeName(''); setNewOfficeUsername(''); setNewOfficePassword(''); setNewPriceRightMosul(''); setNewPriceLeftMosul(''); setShowNewOfficeForm(false);
       fetchAllData(true);
@@ -127,33 +133,35 @@ const ManageOffices: React.FC<ManageOfficesProps> = ({ showToast, loggedInUser, 
     try {
       const nameChanged = editOfficeName.trim() !== editingOfficeUser.office_name;
       if (nameChanged) {
-        const { error: updateRecordsError } = await supabase
-          .from('office_records')
-          .update({ affiliation: editOfficeName.trim() })
-          .eq('affiliation', editingOfficeUser.office_name);
-        if (updateRecordsError) throw new Error('فشل تحديث تبعية السجلات');
+        const storedRecords = localStorage.getItem('office_records');
+        if (storedRecords) {
+          const records = JSON.parse(storedRecords).map((r: any) => 
+            r.affiliation === editingOfficeUser.office_name ? { ...r, affiliation: editOfficeName.trim() } : r
+          );
+          localStorage.setItem('office_records', JSON.stringify(records));
+        }
       }
 
-      const payload: any = { 
-        office_name: editOfficeName.trim(), 
-        username: editOfficeUsername.trim(), // الحقل الجديد
-        phone_number: editOfficePhone.trim(),
-        price_right_mosul: Number(editPriceRightMosul) || 0, 
-        price_left_mosul: Number(editPriceLeftMosul) || 0, 
-        price_hammam_alalil: Number(editPriceHammamAlAlil) || 0,
-        price_alshoura: Number(editPriceAlShoura) || 0,
-        price_baaj: Number(editPriceBaaj) || 0,
-        price_others: Number(editPriceOthers) || 0 
-      };
-      
-      if (editPassword.trim()) payload.password = editPassword.trim();
+      const storedUsers = localStorage.getItem('office_users');
+      if (storedUsers) {
+        const users = JSON.parse(storedUsers).map((u: any) => 
+          u.id === editingOfficeUser.id ? {
+            ...u,
+            office_name: editOfficeName.trim(), 
+            username: editOfficeUsername.trim(),
+            phone_number: editOfficePhone.trim(),
+            priceRightMosul: Number(editPriceRightMosul) || 0, 
+            priceLeftMosul: Number(editPriceLeftMosul) || 0, 
+            priceHammamAlAlil: Number(editPriceHammamAlAlil) || 0,
+            priceAlShoura: Number(editPriceAlShoura) || 0,
+            priceBaaj: Number(editPriceBaaj) || 0,
+            priceOthers: Number(editPriceOthers) || 0,
+            password: editPassword.trim() ? editPassword.trim() : u.password
+          } : u
+        );
+        localStorage.setItem('office_users', JSON.stringify(users));
+      }
 
-      const { error } = await supabase
-        .from('office_users')
-        .update(payload)
-        .eq('id', editingOfficeUser.id);
-
-      if (error) throw error;
       showToast('تم تحديث بيانات المكتب بنجاح', 'success');
       setEditingOfficeUser(null);
       await fetchAllData(true);
@@ -167,8 +175,20 @@ const ManageOffices: React.FC<ManageOfficesProps> = ({ showToast, loggedInUser, 
     if (!deleteOfficeConfirm) return;
     setLoading(true);
     try {
-      await supabase.from('office_records').update({ affiliation: 'المكتب المحذوف' }).eq('affiliation', deleteOfficeConfirm.office_name);
-      await supabase.from('office_users').delete().eq('id', deleteOfficeConfirm.id);
+      const storedRecords = localStorage.getItem('office_records');
+      if (storedRecords) {
+        const records = JSON.parse(storedRecords).map((r: any) => 
+          r.affiliation === deleteOfficeConfirm.office_name ? { ...r, affiliation: 'المكتب المحذوف' } : r
+        );
+        localStorage.setItem('office_records', JSON.stringify(records));
+      }
+
+      const storedUsers = localStorage.getItem('office_users');
+      if (storedUsers) {
+        const users = JSON.parse(storedUsers).filter((u: any) => u.id !== deleteOfficeConfirm.id);
+        localStorage.setItem('office_users', JSON.stringify(users));
+      }
+
       showToast('تم حذف المكتب', 'success');
       setDeleteOfficeConfirm(null);
       fetchAllData(true);
@@ -206,7 +226,13 @@ const ManageOffices: React.FC<ManageOfficesProps> = ({ showToast, loggedInUser, 
      if (!forceLogoutConfirm) return;
      setLoading(true);
      try {
-       await supabase.from('office_users').update({ force_logout: true }).eq('id', forceLogoutConfirm.id);
+       const storedUsers = localStorage.getItem('office_users');
+       if (storedUsers) {
+         const users = JSON.parse(storedUsers).map((u: any) => 
+           u.id === forceLogoutConfirm.id ? { ...u, force_logout: true } : u
+         );
+         localStorage.setItem('office_users', JSON.stringify(users));
+       }
        showToast(`تم إرسال أمر تسجيل الخروج لـ ${forceLogoutConfirm.office_name}`, 'success');
        setForceLogoutConfirm(null);
      } catch (e) { showToast('فشل العملية', 'error'); }
@@ -250,9 +276,16 @@ const ManageOffices: React.FC<ManageOfficesProps> = ({ showToast, loggedInUser, 
             <input type="text" value={newResetPassword} onChange={e => setNewResetPassword(e.target.value)} placeholder="كلمة المرور الجديدة" className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black text-center mb-6 outline-none focus:border-blue-500" />
             <div className="flex gap-2">
               <button onClick={async () => {
-                await supabase.from('office_users').update({ password: newResetPassword }).eq('id', resetPasswordConfirm.id);
+                const storedUsers = localStorage.getItem('office_users');
+                if (storedUsers) {
+                  const users = JSON.parse(storedUsers).map((u: any) => 
+                    u.id === resetPasswordConfirm.id ? { ...u, password: newResetPassword } : u
+                  );
+                  localStorage.setItem('office_users', JSON.stringify(users));
+                }
                 showToast('تم التحديث', 'success');
                 setResetPasswordConfirm(null);
+                fetchAllData(true);
               }} disabled={loading || !newResetPassword.trim()} className="flex-1 bg-blue-600 text-white py-4 rounded-xl font-black shadow-xl active:scale-95 transition-all">تأكيد</button>
               <button onClick={() => setResetPasswordConfirm(null)} className="flex-1 bg-slate-100 text-slate-500 py-4 rounded-xl font-black hover:bg-slate-200 transition-all">إلغاء</button>
             </div>

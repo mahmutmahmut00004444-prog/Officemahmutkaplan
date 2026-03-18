@@ -1,7 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Reviewer, OfficeRecord, CircleType, BookingSource, OfficeUser, OfficeSettlement, SettlementTransaction, Session, Device } from '../types';
-import { supabase } from '../lib/supabase';
 
 interface BackupManagerProps {
   reviewers: Reviewer[];
@@ -25,6 +24,12 @@ interface ImportConfirmData {
   allOfficeUsers?: OfficeUser[];
   officeSettlements?: OfficeSettlement[];
   sourceSettlements?: SettlementTransaction[];
+  
+  sessions?: any[];
+  devices?: any[];
+  activityLogs?: any[];
+  recycleBin?: any[];
+  appSettings?: any[];
   
   reviewerCount: number;
   officeRecordCount: number;
@@ -58,54 +63,44 @@ const BackupManager: React.FC<BackupManagerProps> = ({
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      // To ensure a "World Class" full backup, we fetch fresh data directly from Supabase 
-      // instead of relying solely on props which might be paginated or filtered.
-      
-      const [
-        revRes, offRecRes, 
-        usersRes, sourcesRes, 
-        offSetRes, srcSetRes,
-        sessRes, devRes
-      ] = await Promise.all([
-        supabase.from('reviewers').select('*, family_members(*)'),
-        supabase.from('office_records').select('*, office_family_members(*)'),
-        supabase.from('office_users').select('*'),
-        supabase.from('booking_sources').select('*'),
-        supabase.from('office_settlements').select('*'),
-        supabase.from('settlement_transactions').select('*'),
-        supabase.from('sessions').select('*'),
-        supabase.from('devices').select('*')
-      ]);
-
-      const backupData = {
-        version: "2.0", // Upgraded version
+      const backupData: any = {
+        version: "2.1",
         timestamp: Date.now(),
         type: exportSelection.fullSystem ? 'FULL_SYSTEM' : 'PARTIAL',
-        data: {
-          reviewers: exportSelection.reviewers ? (revRes.data || []) : [],
-          officeRecords: exportSelection.offices ? (offRecRes.data || []) : [],
-          
-          // Full System Data
-          officeUsers: exportSelection.fullSystem ? (usersRes.data || []) : [],
-          bookingSources: exportSelection.fullSystem ? (sourcesRes.data || []) : [],
-          officeSettlements: exportSelection.fullSystem ? (offSetRes.data || []) : [],
-          sourceSettlements: exportSelection.fullSystem ? (srcSetRes.data || []) : [],
-          sessions: exportSelection.fullSystem ? (sessRes.data || []) : [],
-          devices: exportSelection.fullSystem ? (devRes.data || []) : [],
-        }
+        data: {}
       };
+
+      if (exportSelection.fullSystem || exportSelection.reviewers) {
+        backupData.data.reviewers = JSON.parse(localStorage.getItem('reviewers') || '[]');
+      }
+      if (exportSelection.fullSystem || exportSelection.offices) {
+        backupData.data.officeRecords = JSON.parse(localStorage.getItem('office_records') || '[]');
+      }
+
+      if (exportSelection.fullSystem) {
+        backupData.data.officeUsers = JSON.parse(localStorage.getItem('office_users') || '[]');
+        backupData.data.bookingSources = JSON.parse(localStorage.getItem('booking_sources') || '[]');
+        backupData.data.officeSettlements = JSON.parse(localStorage.getItem('office_settlements') || '[]');
+        backupData.data.sourceSettlements = JSON.parse(localStorage.getItem('settlement_transactions') || '[]');
+        backupData.data.sessions = JSON.parse(localStorage.getItem('sessions') || '[]');
+        backupData.data.devices = JSON.parse(localStorage.getItem('devices') || '[]');
+        backupData.data.activityLogs = JSON.parse(localStorage.getItem('activity_logs') || '[]').slice(0, 500);
+        backupData.data.recycleBin = JSON.parse(localStorage.getItem('recycle_bin') || '[]');
+        backupData.data.appSettings = JSON.parse(localStorage.getItem('app_settings') || '[]');
+      }
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `نظام_المراجعين_شامل_${new Date().toLocaleDateString('en-CA')}_${Date.now()}.json`;
+      const dateStr = new Date().toISOString().split('T')[0];
+      link.download = `نظام_المراجعين_نسخة_${dateStr}_${Date.now()}.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (err) {
-      console.error(err);
+      console.error("Export error:", err);
       alert("حدث خطأ أثناء التصدير. يرجى المحاولة مرة أخرى.");
     } finally {
       setIsExporting(false);
@@ -132,7 +127,7 @@ const BackupManager: React.FC<BackupManagerProps> = ({
         const reviewersToImport = d.reviewers || [];
         const officeRecordsToImport = d.officeRecords || [];
         
-        const otherCounts = (d.officeUsers?.length || 0) + (d.bookingSources?.length || 0) + (d.officeSettlements?.length || 0) + (d.sourceSettlements?.length || 0) + (d.sessions?.length || 0);
+        const otherCounts = (d.officeUsers?.length || 0) + (d.bookingSources?.length || 0) + (d.officeSettlements?.length || 0) + (d.sourceSettlements?.length || 0) + (d.sessions?.length || 0) + (d.devices?.length || 0) + (d.activityLogs?.length || 0) + (d.recycleBin?.length || 0) + (d.appSettings?.length || 0);
 
         setImportDataToConfirm({
           reviewers: reviewersToImport,
@@ -142,6 +137,11 @@ const BackupManager: React.FC<BackupManagerProps> = ({
           allOfficeUsers: d.officeUsers,
           officeSettlements: d.officeSettlements,
           sourceSettlements: d.sourceSettlements,
+          sessions: d.sessions,
+          devices: d.devices,
+          activityLogs: d.activityLogs,
+          recycleBin: d.recycleBin,
+          appSettings: d.appSettings,
           
           reviewerCount: reviewersToImport.length,
           officeRecordCount: officeRecordsToImport.length,
@@ -171,9 +171,11 @@ const BackupManager: React.FC<BackupManagerProps> = ({
         officeUsers: importDataToConfirm.allOfficeUsers,
         officeSettlements: importDataToConfirm.officeSettlements,
         sourceSettlements: importDataToConfirm.sourceSettlements,
-        // Pass sessions/devices if needed, handled in parent
-        sessions: (importDataToConfirm as any).sessions, 
-        devices: (importDataToConfirm as any).devices,
+        sessions: importDataToConfirm.sessions, 
+        devices: importDataToConfirm.devices,
+        activityLogs: importDataToConfirm.activityLogs,
+        recycleBin: importDataToConfirm.recycleBin,
+        appSettings: importDataToConfirm.appSettings,
       });
       alert("تم استيراد كافة البيانات بنجاح");
     } catch (err) {
